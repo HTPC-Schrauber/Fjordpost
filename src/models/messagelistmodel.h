@@ -54,6 +54,9 @@ public:
 
 public Q_SLOTS:
     void reload();
+    // Nach Hintergrund-Änderungen: aktualisiert vorhandene Zeilen und fügt
+    // neue ein bzw. entfernt verschwundene, ohne die Liste neu aufzubauen.
+    void refresh();
 
 Q_SIGNALS:
     void countChanged();

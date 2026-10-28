@@ -81,5 +81,47 @@ QQC2.Pane {
                 }
             }
         }
+
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.smallSpacing
+            visible: App.lastError.length > 0
+            type: Kirigami.MessageType.Error
+            text: App.lastError
+            showCloseButton: true
+            onVisibleChanged: if (!visible) App.dismissError()
+        }
+
+        Kirigami.Separator {
+            Layout.fillWidth: true
+        }
+
+        // Synchronisationsstatus
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.smallSpacing
+            QQC2.BusyIndicator {
+                running: App.syncing
+                visible: App.syncing
+                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+            }
+            QQC2.Label {
+                Layout.fillWidth: true
+                text: App.syncing ? i18n("Synchronizing…") : ""
+                color: Kirigami.Theme.disabledTextColor
+                elide: Text.ElideRight
+            }
+            QQC2.ToolButton {
+                icon.name: "view-refresh"
+                text: i18n("Check for new mail")
+                display: QQC2.AbstractButton.IconOnly
+                enabled: !App.syncing
+                QQC2.ToolTip.text: text + " (F5)"
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                onClicked: App.syncNow()
+            }
+        }
     }
 }

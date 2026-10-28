@@ -20,6 +20,49 @@ Kirigami.AbstractApplicationWindow {
         showPassiveNotification(i18n("%1 is coming in a later milestone.", feature));
     }
 
+    function compose(messageId, mode) {
+        const window = composerComponent.createObject(null, {
+            data: App.composeData(messageId, mode)
+        });
+        window.closing.connect(() => window.destroy());
+        window.show();
+    }
+
+    Component {
+        id: composerComponent
+        Composer {}
+    }
+
+    AccountSetupDialog {
+        id: accountSetup
+        parent: root.overlay
+    }
+
+    Connections {
+        target: App
+        function onNotify(message) {
+            root.showPassiveNotification(message);
+        }
+    }
+
+    // Nur für Entwicklung/Tests (--dev-action)
+    function devAction(name) {
+        if (name === "open-first" || name === "reply") {
+            messageList.openFirst();
+            if (name === "reply")
+                compose(App.currentMessage.id, "reply");
+        } else if (name === "compose") {
+            compose(0, "new");
+        } else if (name === "setup") {
+            accountSetup.open();
+        }
+    }
+
+    Component.onCompleted: {
+        if (!App.hasAccounts)
+            accountSetup.open();
+    }
+
     RowLayout {
         anchors.fill: parent
         spacing: 0
@@ -34,7 +77,7 @@ Kirigami.AbstractApplicationWindow {
                     root.notImplemented(name === "calendar" ? i18n("Calendar") : i18n("Contacts"));
             }
             onSettingsRequested: root.notImplemented(i18n("Settings"))
-            onAddAccountRequested: root.notImplemented(i18n("Account setup"))
+            onAddAccountRequested: accountSetup.open()
         }
 
         QQC2.SplitView {
@@ -44,7 +87,7 @@ Kirigami.AbstractApplicationWindow {
             FolderPane {
                 QQC2.SplitView.preferredWidth: Kirigami.Units.gridUnit * 12
                 QQC2.SplitView.minimumWidth: Kirigami.Units.gridUnit * 9
-                onComposeRequested: root.notImplemented(i18n("Composing messages"))
+                onComposeRequested: root.compose(0, "new")
             }
 
             MessageListPane {
@@ -56,7 +99,7 @@ Kirigami.AbstractApplicationWindow {
             ReaderPane {
                 QQC2.SplitView.fillWidth: true
                 QQC2.SplitView.minimumWidth: Kirigami.Units.gridUnit * 18
-                onReplyRequested: root.notImplemented(i18n("Replying"))
+                onReplyRequested: mode => root.compose(App.currentMessage.id, mode)
             }
         }
     }
@@ -68,6 +111,10 @@ Kirigami.AbstractApplicationWindow {
     }
     Shortcut {
         sequence: StandardKey.New
-        onActivated: root.notImplemented(i18n("Composing messages"))
+        onActivated: root.compose(0, "new")
+    }
+    Shortcut {
+        sequences: [StandardKey.Refresh, "F5"]
+        onActivated: App.syncNow()
     }
 }

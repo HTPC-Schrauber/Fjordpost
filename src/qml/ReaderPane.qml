@@ -1,12 +1,14 @@
 import QtQuick
 import QtQuick.Controls as QQC2
+import QtCore
+import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtWebEngine
 import org.kde.kirigami as Kirigami
 import org.kde.kirigamiaddons.components as Components
 import org.mopmail.core
 
 // Rechte Spalte: Anzeige der gewählten Nachricht.
-// TODO(M1): HTML-Darstellung über QtWebEngine (abgeschottet, externe Inhalte blockiert).
 QQC2.Pane {
     id: pane
 
@@ -48,23 +50,26 @@ QQC2.Pane {
                     Kirigami.Action {
                         icon.name: "mail-reply-sender"
                         text: i18n("Reply")
+                        shortcut: "Ctrl+R"
                         onTriggered: pane.replyRequested("reply")
                     },
                     Kirigami.Action {
                         icon.name: "mail-reply-all"
                         text: i18n("Reply All")
+                        shortcut: "Ctrl+Shift+R"
                         onTriggered: pane.replyRequested("replyAll")
                     },
                     Kirigami.Action {
                         icon.name: "mail-forward"
                         text: i18n("Forward")
+                        shortcut: "Ctrl+L"
                         onTriggered: pane.replyRequested("forward")
                     },
                     Kirigami.Action {
                         separator: true
                     },
                     Kirigami.Action {
-                        icon.name: "mail-folder-archive"
+                        icon.name: "archive-insert"
                         text: i18n("Archive")
                         displayHint: Kirigami.DisplayHint.IconOnly
                         onTriggered: App.archiveMessage(pane.msg.id)
@@ -86,6 +91,12 @@ QQC2.Pane {
                         text: i18n("Mark as unread")
                         displayHint: Kirigami.DisplayHint.AlwaysHide
                         onTriggered: App.setRead(pane.msg.id, false)
+                    },
+                    Kirigami.Action {
+                        icon.name: "mail-mark-junk"
+                        text: i18n("Move to spam")
+                        displayHint: Kirigami.DisplayHint.AlwaysHide
+                        onTriggered: App.moveToRole(pane.msg.id, "junk")
                     }
                 ]
             }
@@ -124,13 +135,20 @@ QQC2.Pane {
                     spacing: 0
                     QQC2.Label {
                         Layout.fillWidth: true
-                        text: "<b>%1</b> &lt;%2&gt;".arg(pane.msg.fromName ?? "").arg(pane.msg.fromEmail ?? "")
+                        text: "<b>%1</b> &lt;%2&gt;".arg(String(pane.msg.fromName ?? "").replace(/</g, "&lt;")).arg(pane.msg.fromEmail ?? "")
                         textFormat: Text.StyledText
                         elide: Text.ElideRight
                     }
                     QQC2.Label {
                         Layout.fillWidth: true
                         text: i18n("To: %1", pane.msg.to ?? "")
+                        color: Kirigami.Theme.disabledTextColor
+                        elide: Text.ElideRight
+                    }
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        visible: (pane.msg.cc ?? "").length > 0
+                        text: i18n("Cc: %1", pane.msg.cc ?? "")
                         color: Kirigami.Theme.disabledTextColor
                         elide: Text.ElideRight
                     }
@@ -160,30 +178,113 @@ QQC2.Pane {
                     }
                 }
             }
+
+            // Anhänge
+            Flow {
+                Layout.fillWidth: true
+                visible: attachmentRepeater.count > 0
+                spacing: Kirigami.Units.smallSpacing
+
+                Repeater {
+                    id: attachmentRepeater
+                    model: pane.msg.attachments ?? []
+
+                    QQC2.Button {
+                        required property var modelData
+                        icon.name: "mail-attachment"
+                        text: "%1 (%2)".arg(modelData.name).arg(modelData.size)
+                        QQC2.ToolTip.text: i18n("Open attachment; right-click to save")
+                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        onClicked: App.openAttachment(pane.msg.id, modelData.index)
+
+                        TapHandler {
+                            acceptedButtons: Qt.RightButton
+                            onTapped: {
+                                saveDialog.attachmentIndex = parent.modelData.index;
+                                saveDialog.selectedFile = saveDialog.currentFolder + "/" + parent.modelData.name;
+                                saveDialog.open();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Hinweis auf blockierte externe Inhalte
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            Layout.leftMargin: Kirigami.Units.gridUnit
+            Layout.rightMargin: Kirigami.Units.gridUnit
+            visible: (pane.msg.hasRemoteContent ?? false) && !App.remoteContentAllowed
+            type: Kirigami.MessageType.Information
+            text: i18n("Remote images were blocked to protect your privacy.")
+            actions: Kirigami.Action {
+                text: i18n("Load images")
+                icon.name: "view-preview"
+                onTriggered: App.allowRemoteContent()
+            }
         }
 
         Kirigami.Separator {
             Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.gridUnit
-            Layout.rightMargin: Kirigami.Units.gridUnit
+            Layout.topMargin: Kirigami.Units.smallSpacing
         }
 
         // Nachrichtentext
-        QQC2.ScrollView {
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            QQC2.TextArea {
-                readOnly: true
-                selectByMouse: true
-                wrapMode: TextEdit.Wrap
-                textFormat: TextEdit.PlainText
-                text: pane.msg.body ?? ""
-                leftPadding: Kirigami.Units.gridUnit
-                rightPadding: Kirigami.Units.gridUnit
-                topPadding: Kirigami.Units.gridUnit
-                background: Item {}
+            WebEngineView {
+                id: web
+                anchors.fill: parent
+                visible: !(pane.msg.loading ?? false)
+
+                settings.javascriptEnabled: false
+                settings.javascriptCanOpenWindows: false
+                settings.localContentCanAccessRemoteUrls: false
+                settings.localContentCanAccessFileUrls: false
+                settings.pluginsEnabled: false
+                settings.autoLoadIconsForPage: false
+                settings.focusOnNavigationEnabled: false
+                backgroundColor: Kirigami.Theme.backgroundColor
+
+                // Links nie in der Nachrichtenansicht öffnen, sondern im Browser.
+                onNavigationRequested: request => {
+                    if (request.navigationType === WebEngineNavigationRequest.LinkClickedNavigation) {
+                        Qt.openUrlExternally(request.url);
+                        request.reject();
+                    }
+                }
+                onNewWindowRequested: request => Qt.openUrlExternally(request.requestedUrl)
+
+                function show() {
+                    loadHtml(pane.msg.html ?? "", "about:blank");
+                }
+            }
+
+            Connections {
+                target: App
+                function onCurrentMessageChanged() {
+                    if (pane.hasMessage && !(pane.msg.loading ?? false))
+                        web.show();
+                }
+            }
+
+            QQC2.BusyIndicator {
+                anchors.centerIn: parent
+                running: pane.msg.loading ?? false
+                visible: running
             }
         }
+    }
+
+    FileDialog {
+        id: saveDialog
+        property int attachmentIndex: -1
+        fileMode: FileDialog.SaveFile
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DownloadLocation)
+        onAccepted: App.saveAttachment(pane.msg.id, attachmentIndex, selectedFile)
     }
 }

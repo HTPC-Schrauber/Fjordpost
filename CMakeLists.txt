@@ -22,8 +22,8 @@ ecm_setup_version(${PROJECT_VERSION}
     VARIABLE_PREFIX MOPMAIL
     VERSION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/mopmail-version.h")
 
-find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Sql Network Widgets Test)
-find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS CoreAddons I18n Config DBusAddons Crash Kirigami)
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Sql Network Widgets DBus WebEngineQuick Test)
+find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS CoreAddons I18n Config DBusAddons Crash Kirigami Notifications StatusNotifierItem)
 find_package(Qt6Keychain REQUIRED)
 find_package(KPim6Mime REQUIRED)
 find_package(KPim6IMAP REQUIRED)
@@ -38,5 +38,6 @@ if(BUILD_TESTING)
 endif()
 
 install(FILES data/org.mopmail.MopMail.desktop DESTINATION ${KDE_INSTALL_APPDIR})
+install(FILES data/mopmail.notifyrc DESTINATION ${KDE_INSTALL_KNOTIFYRCDIR})
 
 feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES)

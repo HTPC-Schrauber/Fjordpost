@@ -1,0 +1,13 @@
+[Global]
+IconName=mail-client
+Name=MopMail
+Comment=MopMail email client
+Comment[de]=MopMail E-Mail-Programm
+
+[Event/newMail]
+Name=New mail
+Name[de]=Neue E-Mail
+Comment=A new message has arrived
+Comment[de]=Eine neue Nachricht ist eingetroffen
+Sound=Oxygen-Im-New-Mail.ogg
+Action=Popup|Sound

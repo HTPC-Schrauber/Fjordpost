@@ -8,7 +8,7 @@ C++20 · Qt 6 · KDE Frameworks 6 · Kirigami
 | Meilenstein | Inhalt | Stand |
 |---|---|---|
 | M0 | Grundgerüst, Datenbank, Mailbird-Oberfläche mit Demo-Daten | ✅ |
-| M1 | IMAP + SMTP, Kontoeinrichtung, Lesen/Schreiben | geplant |
+| M1 | IMAP + SMTP, Kontoeinrichtung, Lesen/Schreiben | in Arbeit |
 | M2 | POP3, Unified Inbox, Suche, Threading, Filter | geplant |
 | M3 | CardDAV / CalDAV | geplant |
 | M4 | Google (OAuth2, Gmail, Kontakte, Kalender) | geplant |
@@ -32,6 +32,19 @@ Starten mit Beispieldaten (eigenes Datenverzeichnis, damit echte Daten unberühr
 build/bin/mopmail --demo --data-dir /tmp/mopmail-demo
 ```
 
+Entwickleroptionen: `--offline` (keine Serververbindung), `--screenshot <datei>` und
+`--dev-action open-first|compose|reply|setup` für automatisierte Oberflächenprüfungen.
+
+## Testserver
+
+```sh
+sudo docker compose -f dev/docker-compose.yml up -d
+```
+
+Konto in MopMail anlegen: `max@mopmail.test` / `geheim`, nach „Weiter“ die Server
+manuell eintragen: IMAP `localhost:3143` und SMTP `localhost:3025`, jeweils ohne
+Verschlüsselung. Eine Mail an `anna@mopmail.test` landet im zweiten Testkonto.
+
 ## Tastenkürzel
 
 | Taste | Aktion |
@@ -42,6 +55,11 @@ build/bin/mopmail --demo --data-dir /tmp/mopmail-demo
 | `Entf` | Löschen |
 | `S` | Markieren (Fähnchen) |
 | `U` | Als ungelesen markieren |
+| `Strg+N` | Neue Nachricht |
+| `Strg+R` / `Strg+Umschalt+R` | Antworten / Allen antworten |
+| `Strg+L` | Weiterleiten |
+| `Strg+Enter` | Senden (im Composer) |
+| `F5` | Abrufen |
 
 ## Architektur
 

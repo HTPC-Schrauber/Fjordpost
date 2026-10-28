@@ -7,6 +7,7 @@
 #include <QLocale>
 #include <QLoggingCategory>
 #include <QRegularExpression>
+#include <QSet>
 #include <QSqlError>
 #include <QSqlQuery>
 
@@ -35,6 +36,52 @@ void MessageListModel::reload()
     m_rows = fetchPage(0, pageSize);
     m_hasMore = m_rows.size() == pageSize;
     endResetModel();
+    Q_EMIT countChanged();
+}
+
+void MessageListModel::refresh()
+{
+    const int limit = std::max(int(m_rows.size()), pageSize);
+    const QList<Row> fresh = fetchPage(0, limit);
+
+    // Zeilen, die verschwunden sind, entfernen (von hinten nach vorn).
+    QSet<qint64> freshIds;
+    for (const Row &r : fresh)
+        freshIds.insert(r.id);
+    for (int i = int(m_rows.size()) - 1; i >= 0; --i) {
+        if (!freshIds.contains(m_rows.at(i).id)) {
+            beginRemoveRows({}, i, i);
+            m_rows.removeAt(i);
+            endRemoveRows();
+        }
+    }
+
+    // Neue Zeilen an der richtigen Position einfügen, vorhandene aktualisieren.
+    for (int i = 0; i < fresh.size(); ++i) {
+        const Row &r = fresh.at(i);
+        if (i < m_rows.size() && m_rows.at(i).id == r.id) {
+            Row &old = m_rows[i];
+            if (old.flags != r.flags || old.snippet != r.snippet || old.subject != r.subject || old.hasAttachments != r.hasAttachments) {
+                old = r;
+                Q_EMIT dataChanged(index(i), index(i));
+            }
+            continue;
+        }
+        const int existing = rowOf(r.id);
+        if (existing >= 0) {
+            // Reihenfolge geändert (z. B. Datum): verschieben
+            beginMoveRows({}, existing, existing, {}, existing < i ? i + 1 : i);
+            m_rows.move(existing, i);
+            endMoveRows();
+            m_rows[i] = r;
+            Q_EMIT dataChanged(index(i), index(i));
+        } else {
+            beginInsertRows({}, i, i);
+            m_rows.insert(i, r);
+            endInsertRows();
+        }
+    }
+    m_hasMore = fresh.size() == limit;
     Q_EMIT countChanged();
 }
 

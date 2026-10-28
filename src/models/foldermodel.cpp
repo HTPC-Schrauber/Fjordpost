@@ -21,7 +21,7 @@ QString iconForFolderRole(const QString &role)
     if (role == QLatin1String(FolderRole::Junk))
         return QStringLiteral("mail-mark-junk");
     if (role == QLatin1String(FolderRole::Archive))
-        return QStringLiteral("mail-folder-archive");
+        return QStringLiteral("archive-insert");
     if (role == QLatin1String(FolderRole::Flagged))
         return QStringLiteral("flag");
     return QStringLiteral("folder-mail");

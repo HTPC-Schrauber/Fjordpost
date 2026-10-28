@@ -8,6 +8,10 @@ import org.mopmail.core
 QQC2.Pane {
     id: pane
 
+    function openFirst() {
+        messageList.currentIndex = 0;
+    }
+
     function focusSearch() {
         searchField.forceActiveFocus();
         searchField.selectAll();
@@ -76,7 +80,8 @@ QQC2.Pane {
                 }
 
                 onCurrentIndexChanged: {
-                    if (currentItem)
+                    // Verschiebt sich nur die Position (neue Mails oben), nicht neu öffnen.
+                    if (currentItem && currentItem.messageId !== App.currentMessage.id)
                         App.openMessage(currentItem.messageId);
                 }
 

@@ -106,7 +106,7 @@ QQC2.ItemDelegate {
                     spacing: 0
                     Repeater {
                         model: [
-                            { icon: "mail-folder-archive", tip: i18n("Archive (E)"), act: () => App.archiveMessage(delegate.messageId) },
+                            { icon: "archive-insert", tip: i18n("Archive (E)"), act: () => App.archiveMessage(delegate.messageId) },
                             { icon: "edit-delete", tip: i18n("Delete (Del)"), act: () => App.deleteMessage(delegate.messageId) },
                             { icon: delegate.flagged ? "flag-red" : "flag", tip: i18n("Flag (S)"), act: () => App.toggleFlagged(delegate.messageId) },
                             { icon: delegate.unread ? "mail-mark-read" : "mail-mark-unread", tip: delegate.unread ? i18n("Mark as read") : i18n("Mark as unread (U)"), act: () => App.setRead(delegate.messageId, delegate.unread) },
