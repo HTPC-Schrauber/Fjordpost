@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=MopMail
+GenericName=Email Client
+GenericName[de]=E-Mail-Programm
+Comment=A modern email client for KDE Plasma
+Comment[de]=Ein moderner E-Mail-Client für KDE Plasma
+Exec=mopmail %u
+Icon=mail-client
+Terminal=false
+Categories=Qt;KDE;Office;Network;Email;
+MimeType=x-scheme-handler/mailto;message/rfc822;
+Keywords=mail;email;imap;pop3;smtp;
+Keywords[de]=Mail;E-Mail;IMAP;POP3;SMTP;
+StartupNotify=true
