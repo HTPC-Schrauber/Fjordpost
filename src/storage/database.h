@@ -18,6 +18,8 @@ public:
     static QSqlDatabase connection();
 
     static QString path();
+    // Verzeichnis der Datenbank; auch Wurzel für den BlobStore.
+    static QString dataDir();
     static int schemaVersion();
     static int latestSchemaVersion();
 

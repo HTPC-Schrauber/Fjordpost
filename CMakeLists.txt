@@ -25,10 +25,15 @@ ecm_setup_version(${PROJECT_VERSION}
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Sql Network Widgets Test)
 find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS CoreAddons I18n Config DBusAddons Crash Kirigami)
 find_package(Qt6Keychain REQUIRED)
+find_package(KPim6Mime REQUIRED)
+find_package(KPim6IMAP REQUIRED)
+find_package(KPim6SMTP REQUIRED)
 
 add_subdirectory(src)
 
 if(BUILD_TESTING)
+    # Die Testbibliothek von KIMAP (FakeServer) hängt von KIO ab.
+    find_package(KF6KIO ${KF_MIN_VERSION} REQUIRED)
     add_subdirectory(tests)
 endif()
 

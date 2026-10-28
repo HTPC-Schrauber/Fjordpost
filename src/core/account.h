@@ -34,7 +34,8 @@ struct Account {
     int sortOrder = 0;
 
     bool isValid() const { return id > 0; }
-    QString secretKey() const { return QStringLiteral("account-%1").arg(id); }
+    QString secretKey() const { return secretKeyFor(id); }
+    static QString secretKeyFor(qint64 accountId) { return QStringLiteral("account-%1").arg(accountId); }
 };
 
 QString accountTypeToString(AccountType t);

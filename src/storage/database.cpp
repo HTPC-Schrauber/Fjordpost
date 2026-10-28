@@ -14,6 +14,7 @@ namespace MopMail {
 namespace {
 
 QString s_path;
+QString s_dataDir;
 
 // Jede Migration bringt das Schema genau eine Version weiter.
 // Bestehende Einträge niemals ändern, nur neue anhängen.
@@ -107,6 +108,41 @@ const char *const migrations[] = {
         value TEXT NOT NULL
     );
     )SQL",
+
+    // v2: Synchronisation, Offline-Operationen und Postausgang
+    R"SQL(
+    ALTER TABLE messages ADD COLUMN body_fetched INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE messages ADD COLUMN bcc_list TEXT NOT NULL DEFAULT '';
+    ALTER TABLE messages ADD COLUMN reply_to TEXT NOT NULL DEFAULT '';
+
+    -- Lokale Änderungen, die noch zum Server müssen (Flags, Verschieben, Löschen).
+    CREATE TABLE pending_ops (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        op          TEXT NOT NULL,
+        folder_path TEXT NOT NULL,
+        uid         INTEGER NOT NULL,
+        argument    TEXT NOT NULL DEFAULT '',
+        created     INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_pending_ops_account ON pending_ops(account_id, id);
+
+    -- Zu sendende Nachrichten (RFC 822 im BlobStore).
+    CREATE TABLE outbox (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        blob_path   TEXT NOT NULL,
+        sender      TEXT NOT NULL,
+        recipients  TEXT NOT NULL,
+        subject     TEXT NOT NULL DEFAULT '',
+        send_after  INTEGER NOT NULL DEFAULT 0,
+        attempts    INTEGER NOT NULL DEFAULT 0,
+        last_error  TEXT NOT NULL DEFAULT '',
+        -- Bezugsnachricht für Antwort/Weiterleitung (Flag nach dem Senden setzen)
+        reference_message INTEGER NOT NULL DEFAULT 0,
+        reference_kind    TEXT NOT NULL DEFAULT ''
+    );
+    )SQL",
 };
 
 constexpr int migrationCount = int(sizeof(migrations) / sizeof(migrations[0]));
@@ -169,8 +205,8 @@ void applyPragmas(QSqlDatabase &db)
 bool Database::initialize(const QString &path)
 {
     s_path = path;
-    if (path != QLatin1String(":memory:"))
-        QDir().mkpath(QFileInfo(path).absolutePath());
+    s_dataDir = QFileInfo(path).absolutePath();
+    QDir().mkpath(s_dataDir);
 
     QSqlDatabase db = connection();
     if (!db.isOpen()) {
@@ -196,6 +232,11 @@ QSqlDatabase Database::connection()
 QString Database::path()
 {
     return s_path;
+}
+
+QString Database::dataDir()
+{
+    return s_dataDir;
 }
 
 int Database::schemaVersion()

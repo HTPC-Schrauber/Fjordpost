@@ -3,8 +3,16 @@ add_library(mopmailcore STATIC
     core/account.cpp
     core/accountmanager.cpp
     core/secretstore.cpp
+    storage/blobstore.cpp
     storage/database.cpp
     storage/demodata.cpp
+    storage/mailstore.cpp
+    mail/imap/imapaccount.cpp
+    mail/imap/imapconnection.cpp
+    mail/mailservice.cpp
+    mail/mime/messagebuilder.cpp
+    mail/mime/messageparser.cpp
+    mail/smtp/smtpsender.cpp
     models/accountmodel.cpp
     models/foldermodel.cpp
     models/messagelistmodel.cpp
@@ -15,6 +23,7 @@ target_link_libraries(mopmailcore PUBLIC
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Sql Qt6::Network
     KF6::CoreAddons KF6::I18n KF6::ConfigCore
     Qt6Keychain::Qt6Keychain
+    KPim6::Mime KPim6::IMAP KPim6::SMTP
 )
 
 add_executable(mopmail main.cpp)
