@@ -1,0 +1,4 @@
+# Einheitliche Zeilenenden (Entwicklung unter WSL und Linux)
+* text=auto eol=lf
+*.png binary
+*.svg text
