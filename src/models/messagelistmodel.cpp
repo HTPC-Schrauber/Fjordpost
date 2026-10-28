@@ -100,7 +100,7 @@ QString MessageListModel::ftsQuery(const QString &text)
 QList<MessageListModel::Row> MessageListModel::fetchPage(int offset, int limit) const
 {
     QString sql = QStringLiteral(
-        "SELECT m.id, m.subject, m.from_name, m.from_email, m.date, m.snippet, m.flags, m.has_attachments, a.color "
+        "SELECT m.id, m.subject, m.from_name, m.from_email, m.date, m.snippet, m.flags, m.has_attachments, a.color, f.name "
         "FROM messages m JOIN folders f ON f.id = m.folder_id JOIN accounts a ON a.id = m.account_id ");
     QStringList where;
     QVariantList binds;
@@ -126,6 +126,12 @@ QList<MessageListModel::Row> MessageListModel::fetchPage(int offset, int limit) 
         binds << m_filter.accountId;
     }
     where << QStringLiteral("(m.flags & %1) = 0").arg(MessageFlag::Deleted);
+    if (m_filter.quick == QLatin1String("unread"))
+        where << QStringLiteral("(m.flags & %1) = 0").arg(MessageFlag::Seen);
+    else if (m_filter.quick == QLatin1String("flagged"))
+        where << QStringLiteral("(m.flags & %1) != 0").arg(MessageFlag::Flagged);
+    else if (m_filter.quick == QLatin1String("attachments"))
+        where << QStringLiteral("m.has_attachments = 1");
     sql += QStringLiteral("WHERE ") + where.join(QStringLiteral(" AND "));
     sql += QStringLiteral(" ORDER BY m.date DESC LIMIT %1 OFFSET %2").arg(limit).arg(offset);
 
@@ -150,6 +156,7 @@ QList<MessageListModel::Row> MessageListModel::fetchPage(int offset, int limit) 
         r.flags = q.value(6).toInt();
         r.hasAttachments = q.value(7).toBool();
         r.accountColor = QColor(q.value(8).toString());
+        r.folderName = q.value(9).toString();
         rows << r;
     }
     return rows;
@@ -195,6 +202,26 @@ QString MessageListModel::formatDate(const QDateTime &date)
     return locale.toString(d, QLocale::ShortFormat);
 }
 
+QString MessageListModel::dateGroup(const QDateTime &date)
+{
+    const QDate today = QDate::currentDate();
+    const qint64 days = date.date().daysTo(today);
+    if (days <= 0)
+        return i18n("Today");
+    if (days == 1)
+        return i18n("Yesterday");
+    if (days < 7)
+        return i18n("This Week");
+    if (date.date().year() == today.year() && date.date().month() == today.month())
+        return i18n("This Month");
+    return i18n("Older");
+}
+
+qint64 MessageListModel::idAt(int row) const
+{
+    return row >= 0 && row < m_rows.size() ? m_rows.at(row).id : 0;
+}
+
 QVariant MessageListModel::data(const QModelIndex &index, int role) const
 {
     if (!checkIndex(index, CheckIndexOption::IndexIsValid))
@@ -226,6 +253,23 @@ QVariant MessageListModel::data(const QModelIndex &index, int role) const
         return r.hasAttachments;
     case AccountColorRole:
         return r.accountColor;
+    case DateGroupRole:
+        return dateGroup(r.date);
+    case InitialsRole: {
+        const QString name = r.fromName.isEmpty() ? r.fromEmail : r.fromName;
+        static const QRegularExpression separators(QStringLiteral("[\\s.@_-]+"));
+        const QStringList parts = name.split(separators, Qt::SkipEmptyParts);
+        QString initials;
+        for (const QString &p : parts) {
+            if (p.at(0).isLetter())
+                initials += p.at(0).toUpper();
+            if (initials.size() == 2)
+                break;
+        }
+        return initials.isEmpty() ? QStringLiteral("?") : initials;
+    }
+    case FolderNameRole:
+        return r.folderName;
     }
     return {};
 }
@@ -245,6 +289,9 @@ QHash<int, QByteArray> MessageListModel::roleNames() const
         {AnsweredRole, "answered"},
         {HasAttachmentsRole, "hasAttachments"},
         {AccountColorRole, "accountColor"},
+        {DateGroupRole, "dateGroup"},
+        {InitialsRole, "initials"},
+        {FolderNameRole, "folderName"},
     };
 }
 

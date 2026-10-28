@@ -1,85 +1,101 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
+import "components"
 
-// Runde Schaltfläche in der App-Leiste: Konto-Avatar oder Symbol, mit
-// Auswahlmarkierung links und Zähler für ungelesene Nachrichten.
+// Schaltfläche in der App-Leiste: Konto (Initialen) oder Symbol,
+// mit Auswahlmarkierung links und Punkt für ungelesene Nachrichten.
 QQC2.AbstractButton {
     id: control
 
-    property string iconName: ""
-    property color avatarColor: Kirigami.Theme.highlightColor
+    property string iconName
+    property string initials
+    property color tint: Theme.accent
     property bool selected: false
+    property bool filled: false       // Akzent-gefüllt (Unified Inbox)
+    property bool subtle: false        // Modul-Schalter (Mail, Kalender, ...)
     property int badge: 0
 
-    implicitWidth: Kirigami.Units.gridUnit * 3
-    implicitHeight: Kirigami.Units.gridUnit * 2.75
+    implicitWidth: 56
+    implicitHeight: 40
     hoverEnabled: true
+    Accessible.name: text
 
     QQC2.ToolTip.text: text
     QQC2.ToolTip.visible: hovered
     QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
 
-    Accessible.name: text
+    // Aktive Markierung am linken Rand
+    Rectangle {
+        x: 0
+        anchors.verticalCenter: parent.verticalCenter
+        width: 4
+        height: control.selected ? 20 : 0
+        radius: 2
+        color: Theme.accent
+        visible: !control.subtle
+        Behavior on height {
+            NumberAnimation { duration: 150 }
+        }
+    }
 
     contentItem: Item {
-        // Auswahlmarkierung
         Rectangle {
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            width: 3
-            height: control.selected ? parent.height * 0.7 : (control.hovered ? parent.height * 0.35 : 0)
-            radius: 1.5
-            color: Kirigami.Theme.textColor
-            Behavior on height { NumberAnimation { duration: Kirigami.Units.shortDuration } }
-        }
-
-        Rectangle {
-            id: circle
+            id: tile
             anchors.centerIn: parent
-            width: Kirigami.Units.gridUnit * 2
-            height: width
-            radius: control.selected ? width * 0.3 : width / 2
-            color: control.iconName.length > 0 ? (control.selected ? Kirigami.Theme.highlightColor : Qt.rgba(1, 1, 1, control.hovered ? 0.18 : 0.08))
-                                               : control.avatarColor
-            Behavior on radius { NumberAnimation { duration: Kirigami.Units.shortDuration } }
+            width: 36
+            height: 36
+            radius: Theme.radiusLg
+            color: {
+                if (control.filled && control.selected)
+                    return Theme.accent;
+                if (control.subtle)
+                    return control.selected ? Qt.alpha(Theme.accent, 0.15) : (control.hovered ? Theme.card : "transparent");
+                if (control.initials.length > 0)
+                    return control.hovered ? Qt.alpha(control.tint, 0.2) : Theme.card;
+                return control.hovered ? Theme.card : (control.filled ? Theme.card : "transparent");
+            }
+            border.width: control.initials.length > 0 ? 1 : 0
+            border.color: control.selected ? Qt.alpha(control.tint, 0.6) : Theme.border
 
             Kirigami.Icon {
                 anchors.centerIn: parent
                 visible: control.iconName.length > 0
-                width: Kirigami.Units.iconSizes.smallMedium
-                height: width
+                width: 16
+                height: 16
                 source: control.iconName
-                color: Kirigami.Theme.textColor
                 isMask: true
+                color: control.filled && control.selected ? Theme.accentText : (control.selected ? Theme.accent : (control.hovered ? Theme.textPrimary : Theme.textSecondary))
             }
             QQC2.Label {
                 anchors.centerIn: parent
                 visible: control.iconName.length === 0
-                text: control.text.length > 0 ? control.text.charAt(0).toUpperCase() : "?"
-                color: "white"
-                font.bold: true
-                font.pixelSize: circle.height * 0.45
+                text: control.initials
+                color: control.tint
+                font.weight: Font.DemiBold
+                font.pointSize: Theme.fontXs
             }
         }
 
-        // Zähler ungelesener Nachrichten
+        // Ungelesen-Punkt bzw. Zähler
         Rectangle {
             visible: control.badge > 0
-            anchors.right: circle.right
-            anchors.top: circle.top
-            anchors.rightMargin: -width / 3
-            anchors.topMargin: -height / 3
-            height: Kirigami.Units.gridUnit * 0.9
-            width: Math.max(height, badgeLabel.implicitWidth + Kirigami.Units.smallSpacing * 2)
-            radius: height / 2
-            color: Kirigami.Theme.negativeTextColor
+            anchors.right: tile.right
+            anchors.top: tile.top
+            anchors.rightMargin: -4
+            anchors.topMargin: -4
+            height: 14
+            width: Math.max(14, badgeLabel.implicitWidth + 8)
+            radius: 7
+            color: control.filled ? Theme.danger : Theme.accent
+            border.width: 2
+            border.color: Theme.dock
             QQC2.Label {
                 id: badgeLabel
                 anchors.centerIn: parent
                 text: control.badge > 99 ? "99+" : control.badge
                 color: "white"
-                font.pixelSize: parent.height * 0.7
+                font.pixelSize: 8
                 font.bold: true
             }
         }

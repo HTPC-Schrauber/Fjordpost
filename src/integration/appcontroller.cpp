@@ -19,6 +19,8 @@
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
+#include <QDirIterator>
+#include <QFileInfo>
 #include <QFile>
 #include <QGuiApplication>
 #include <QLocale>
@@ -32,21 +34,24 @@ namespace MopMail {
 
 namespace {
 
-// Klartext als HTML im Farbschema der Anwendung darstellen.
-QString plainTextToHtml(const QString &text)
+// Klartext als HTML darstellen. colors: Hintergrund, Text, Link, gedämpft.
+QString plainTextToHtml(const QString &text, QStringList colors = {})
 {
-    const QPalette pal = QGuiApplication::palette();
+    if (colors.size() < 4) {
+        const QPalette pal = QGuiApplication::palette();
+        colors = {pal.color(QPalette::Base).name(), pal.color(QPalette::Text).name(), pal.color(QPalette::Link).name(),
+                  pal.color(QPalette::PlaceholderText).name()};
+    }
     QString html = KTextToHTML::convertToHtml(text, KTextToHTML::PreserveSpaces | KTextToHTML::HighlightText);
     // Zitate abschwächen (Zeilen, die mit &gt; beginnen)
     static const QRegularExpression quoteLine(QStringLiteral("(^|<br />)((?:&gt;|&nbsp;)*&gt;[^<]*)"));
     html.replace(quoteLine, QStringLiteral("\\1<span class=\"quote\">\\2</span>"));
     return QStringLiteral(
                "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>"
-               "body{font-family:sans-serif;font-size:10pt;color:%1;background:%2;margin:0;padding:16px;overflow-wrap:anywhere}"
+               "body{font-family:sans-serif;font-size:10.5pt;line-height:1.6;color:%2;background:%1;margin:0;padding:8px 28px 24px;overflow-wrap:anywhere}"
                "a{color:%3}.quote{color:%4}"
                "</style></head><body>%5</body></html>")
-        .arg(pal.color(QPalette::Text).name(), pal.color(QPalette::Base).name(), pal.color(QPalette::Link).name(),
-             pal.color(QPalette::PlaceholderText).name(), html);
+        .arg(colors.at(0), colors.at(1), colors.at(2), colors.at(3), html);
 }
 
 // HTML-Mails gehen davon aus, auf weißem Grund dargestellt zu werden.
@@ -55,7 +60,7 @@ QString wrapHtml(const QString &html)
     if (html.contains(QLatin1String("<html"), Qt::CaseInsensitive))
         return html;
     return QStringLiteral("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>body{background:#fff;color:#000;"
-                          "font-family:sans-serif;font-size:10pt;margin:0;padding:16px}</style></head><body>%1</body></html>")
+                          "font-family:sans-serif;font-size:10pt;margin:0;padding:16px 28px}</style></head><body>%1</body></html>")
         .arg(html);
 }
 
@@ -74,6 +79,14 @@ QString mediumDate(const QDateTime &date)
 {
     const QLocale locale;
     return QStringLiteral("%1, %2").arg(locale.dayName(date.date().dayOfWeek(), QLocale::ShortFormat), locale.toString(date, QLocale::ShortFormat));
+}
+
+QString folderDisplayName(qint64 messageId)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT f.name FROM messages m JOIN folders f ON f.id = m.folder_id WHERE m.id = ?"));
+    q.addBindValue(messageId);
+    return q.exec() && q.next() ? q.value(0).toString() : QString();
 }
 
 QString formatSize(qint64 bytes)
@@ -149,7 +162,7 @@ AppController::AppController(AccountManager *accounts, MailService *mail, Accoun
             loadCurrent(messageId);
         } else {
             m_current[QStringLiteral("loading")] = false;
-            m_current[QStringLiteral("html")] = plainTextToHtml(i18n("The message could not be loaded from the server."));
+            m_current[QStringLiteral("html")] = plainTextToHtml(i18n("The message could not be loaded from the server."), m_readerColors);
             Q_EMIT currentMessageChanged();
         }
     });
@@ -219,6 +232,23 @@ void AppController::setSearchText(const QString &text)
     applyFilter();
 }
 
+void AppController::setQuickFilter(const QString &filter)
+{
+    if (m_quickFilter == filter)
+        return;
+    m_quickFilter = filter;
+    Q_EMIT quickFilterChanged();
+    applyFilter();
+}
+
+QString AppController::selectionSubtitle() const
+{
+    if (m_accountId > 0)
+        return m_accountManager->account(m_accountId).email;
+    const int count = int(m_accountManager->accounts().size());
+    return i18np("%1 account connected", "%1 accounts connected", count);
+}
+
 void AppController::selectAccount(qint64 accountId)
 {
     m_accountId = accountId;
@@ -264,6 +294,7 @@ void AppController::applyFilter()
     f.folderId = m_folderId;
     f.role = m_role;
     f.search = m_search;
+    f.quick = m_quickFilter;
     m_messageModel->setFilter(f);
 
     if (!m_current.isEmpty()) {
@@ -339,6 +370,7 @@ void AppController::loadCurrent(qint64 messageId)
         {QStringLiteral("loading"), false},
         {QStringLiteral("hasRemoteContent"), false},
         {QStringLiteral("attachments"), QVariantList()},
+        {QStringLiteral("folderName"), folderDisplayName(messageId)},
     };
 
     if (bodyFetched && !blobPath.isEmpty()) {
@@ -347,7 +379,7 @@ void AppController::loadCurrent(qint64 messageId)
             m_current[QStringLiteral("html")] = wrapHtml(parsed.html);
             m_current[QStringLiteral("hasRemoteContent")] = hasRemoteContent(parsed.html);
         } else {
-            m_current[QStringLiteral("html")] = plainTextToHtml(parsed.plainText);
+            m_current[QStringLiteral("html")] = plainTextToHtml(parsed.plainText, m_readerColors);
         }
         QVariantList attachments;
         for (const AttachmentInfo &a : parsed.attachments) {
@@ -366,7 +398,7 @@ void AppController::loadCurrent(qint64 messageId)
         m_mail->fetchBody(messageId);
     } else {
         // Lokale Nachricht ohne Server-Kopie (z. B. Demo-Daten)
-        m_current[QStringLiteral("html")] = plainTextToHtml(q.value(8).toString());
+        m_current[QStringLiteral("html")] = plainTextToHtml(q.value(8).toString(), m_readerColors);
     }
     Q_EMIT currentMessageChanged();
 }
@@ -381,6 +413,56 @@ void AppController::allowRemoteContent()
     Q_EMIT currentMessageChanged();
     m_current = current;
     Q_EMIT currentMessageChanged();
+}
+
+// ------------------------------------------------------- Kontextleiste usw.
+
+void AppController::setReaderColors(const QString &background, const QString &text, const QString &link, const QString &muted)
+{
+    const QStringList colors{background, text, link, muted};
+    if (colors == m_readerColors)
+        return;
+    m_readerColors = colors;
+    const qint64 id = m_current.value(QStringLiteral("id")).toLongLong();
+    if (id > 0 && !m_current.value(QStringLiteral("loading")).toBool())
+        loadCurrent(id);
+}
+
+int AppController::messageCountFrom(const QString &email) const
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT COUNT(*) FROM messages WHERE from_email = ? COLLATE NOCASE"));
+    q.addBindValue(email);
+    return q.exec() && q.next() ? q.value(0).toInt() : 0;
+}
+
+void AppController::showMessagesFrom(const QString &email)
+{
+    setSearchText(email);
+}
+
+QString AppController::cacheSize() const
+{
+    qint64 total = QFileInfo(Database::path()).size() + QFileInfo(Database::path() + QStringLiteral("-wal")).size();
+    QDirIterator it(QDir(Database::dataDir()).filePath(QStringLiteral("blobs")), QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+        total += it.fileInfo().size();
+    }
+    return formatSize(total);
+}
+
+void AppController::markAllRead()
+{
+    // Alle sichtbaren ungelesenen Nachrichten der aktuellen Liste
+    QList<qint64> ids;
+    for (int row = 0; row < m_messageModel->rowCount(); ++row) {
+        const QModelIndex idx = m_messageModel->index(row);
+        if (idx.data(MessageListModel::UnreadRole).toBool())
+            ids << idx.data(MessageListModel::MessageIdRole).toLongLong();
+    }
+    for (qint64 id : std::as_const(ids))
+        setRead(id, true);
 }
 
 // ---------------------------------------------------------------- Aktionen
@@ -606,6 +688,16 @@ QString AppController::sendMessage(const QVariantMap &data)
     const QString mode = data.value(QStringLiteral("mode")).toString();
     const qint64 reference = (mode == QLatin1String("new")) ? 0 : data.value(QStringLiteral("referenceId")).toLongLong();
     return m_mail->queueMessage(accountId, outgoingFromMap(data), reference, mode == QLatin1String("forward") ? QStringLiteral("forward") : QStringLiteral("reply"));
+}
+
+QString AppController::sendQuickReply(const QString &text)
+{
+    const qint64 id = m_current.value(QStringLiteral("id")).toLongLong();
+    if (id <= 0 || text.trimmed().isEmpty())
+        return i18n("Please enter a message.");
+    QVariantMap data = composeData(id, QStringLiteral("reply"));
+    data[QStringLiteral("body")] = QString(text + data.value(QStringLiteral("body")).toString());
+    return sendMessage(data);
 }
 
 QString AppController::saveDraft(const QVariantMap &data)

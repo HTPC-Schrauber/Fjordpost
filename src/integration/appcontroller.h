@@ -34,6 +34,8 @@ class AppController : public QObject
     Q_PROPERTY(bool syncing READ syncing NOTIFY syncingChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
     Q_PROPERTY(bool remoteContentAllowed READ remoteContentAllowed NOTIFY remoteContentAllowedChanged)
+    Q_PROPERTY(QString quickFilter READ quickFilter WRITE setQuickFilter NOTIFY quickFilterChanged)
+    Q_PROPERTY(QString selectionSubtitle READ selectionSubtitle NOTIFY selectionChanged)
 
 public:
     AppController(AccountManager *accounts, MailService *mail, AccountSetup *setup, QObject *parent = nullptr);
@@ -55,6 +57,9 @@ public:
     bool syncing() const;
     QString lastError() const { return m_lastError; }
     bool remoteContentAllowed() const { return m_remoteAllowed; }
+    QString quickFilter() const { return m_quickFilter; }
+    void setQuickFilter(const QString &filter);
+    QString selectionSubtitle() const;
 
     // 0 = Unified Inbox (alle Konten)
     Q_INVOKABLE void selectAccount(qint64 accountId);
@@ -69,6 +74,13 @@ public:
     Q_INVOKABLE void deleteMessage(qint64 messageId);
     Q_INVOKABLE void archiveMessage(qint64 messageId);
     Q_INVOKABLE void allowRemoteContent();
+    Q_INVOKABLE void markAllRead();
+    // Kontext-Seitenleiste
+    Q_INVOKABLE int messageCountFrom(const QString &email) const;
+    Q_INVOKABLE void showMessagesFrom(const QString &email);
+    Q_INVOKABLE QString cacheSize() const;
+    // Farben für die Darstellung von Klartext-Mails (aus dem QML-Theme).
+    Q_INVOKABLE void setReaderColors(const QString &background, const QString &text, const QString &link, const QString &muted);
 
     // Composer
     Q_INVOKABLE QVariantList identities() const;
@@ -77,6 +89,8 @@ public:
     // Liefert eine Fehlermeldung oder einen leeren String bei Erfolg.
     Q_INVOKABLE QString sendMessage(const QVariantMap &data);
     Q_INVOKABLE QString saveDraft(const QVariantMap &data);
+    // Schnellantwort aus dem Lesebereich: Text über dem Zitat der aktuellen Nachricht.
+    Q_INVOKABLE QString sendQuickReply(const QString &text);
 
     // Anhänge
     Q_INVOKABLE void openAttachment(qint64 messageId, int index);
@@ -91,6 +105,7 @@ Q_SIGNALS:
     void syncingChanged();
     void lastErrorChanged();
     void remoteContentAllowedChanged();
+    void quickFilterChanged();
     void notify(const QString &message);
 
 private:
@@ -118,6 +133,8 @@ private:
     int m_totalUnread = 0;
     QString m_lastError;
     bool m_remoteAllowed = false;
+    QString m_quickFilter;
+    QStringList m_readerColors;
 };
 
 } // namespace MopMail

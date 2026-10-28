@@ -3,35 +3,85 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.mopmail.core
+import "components"
 
-// Ordnerspalte: "Neue E-Mail"-Schaltfläche und Ordnerliste des gewählten
-// Kontos bzw. die Sammelordner der Unified Inbox.
-QQC2.Pane {
+// Ordnerspalte: Kontotitel, "Neue E-Mail", Ordner, Status und Cache.
+Rectangle {
     id: pane
 
     signal composeRequested()
 
-    padding: 0
-    Kirigami.Theme.colorSet: Kirigami.Theme.View
-    Kirigami.Theme.inherit: false
-    background: Rectangle {
-        color: Kirigami.Theme.alternateBackgroundColor
+    color: Theme.sidebar
+
+    Rectangle {
+        anchors.right: parent.right
+        width: 1
+        height: parent.height
+        color: Theme.border
     }
 
     ColumnLayout {
         anchors.fill: parent
+        anchors.rightMargin: 1
         spacing: 0
 
-        QQC2.Button {
+        // Kopf
+        ColumnLayout {
             Layout.fillWidth: true
-            Layout.margins: Kirigami.Units.largeSpacing
-            Layout.preferredHeight: Kirigami.Units.gridUnit * 2.2
-            text: i18n("New Email")
-            icon.name: "mail-message-new"
-            highlighted: true
-            onClicked: pane.composeRequested()
+            Layout.margins: 14
+            spacing: 14
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 4
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 0
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        text: App.selectedAccountId === 0 ? i18n("All Mailboxes") : App.selectionTitle
+                        font.pointSize: Theme.fontSm
+                        font.weight: Font.DemiBold
+                        color: Theme.textPrimary
+                        elide: Text.ElideRight
+                    }
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        text: App.selectionSubtitle
+                        font.pointSize: Theme.fontXxs
+                        color: Theme.textMuted
+                        elide: Text.ElideRight
+                    }
+                }
+                IconButton {
+                    iconName: "view-refresh"
+                    iconSize: 14
+                    tooltip: i18n("Synchronize now (F5)")
+                    enabled: !App.syncing
+                    onClicked: App.syncNow()
+                    RotationAnimation on rotation {
+                        running: App.syncing
+                        loops: Animation.Infinite
+                        from: 0
+                        to: 360
+                        duration: 1200
+                        onStopped: parent.rotation = 0
+                    }
+                }
+            }
+
+            AccentButton {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 38
+                fillWidth: true
+                text: i18n("New Email")
+                iconName: "document-edit"
+                shortcutHint: i18nc("keyboard shortcut", "Ctrl+N")
+                onClicked: pane.composeRequested()
+            }
         }
 
+        // Ordner
         QQC2.ScrollView {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -42,9 +92,17 @@ QQC2.Pane {
                 model: App.folders
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
+                leftMargin: 10
+                rightMargin: 10
+                spacing: 2
+                header: SectionLabel {
+                    leftPadding: 8
+                    bottomPadding: 6
+                    text: i18n("Mailbox")
+                }
 
-                delegate: QQC2.ItemDelegate {
-                    id: folderDelegate
+                delegate: QQC2.AbstractButton {
+                    id: folder
 
                     required property var folderId
                     required property string name
@@ -52,75 +110,149 @@ QQC2.Pane {
                     required property string iconName
                     required property int unreadCount
 
-                    width: ListView.view.width
-                    highlighted: App.searchText.length === 0
-                                 && (folderId > 0 ? App.selectedFolderId === folderId
-                                                  : App.selectedFolderId === 0 && App.selectedRole === folderRole)
+                    readonly property bool current: App.searchText.length === 0
+                        && (folderId > 0 ? App.selectedFolderId === folderId : App.selectedFolderId === 0 && App.selectedRole === folderRole)
+
+                    width: ListView.view.width - 20
+                    implicitHeight: 32
+                    hoverEnabled: true
                     onClicked: App.selectFolder(folderId, folderRole, name)
 
+                    background: Rectangle {
+                        radius: Theme.radius
+                        color: folder.current ? Qt.alpha(Theme.accent, 0.15) : (folder.hovered ? Theme.card : "transparent")
+                    }
+
                     contentItem: RowLayout {
-                        spacing: Kirigami.Units.largeSpacing
+                        spacing: 10
+                        Item {
+                            Layout.preferredWidth: 2
+                        }
                         Kirigami.Icon {
-                            source: folderDelegate.iconName
-                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            Layout.preferredWidth: 16
+                            Layout.preferredHeight: 16
+                            source: folder.folderRole === "flagged" ? "starred-symbolic" : folder.iconName
+                            isMask: true
+                            color: folder.current ? Theme.accent : (folder.folderRole === "flagged" ? Theme.star : (folder.hovered ? Theme.textPrimary : Theme.textSecondary))
                         }
                         QQC2.Label {
                             Layout.fillWidth: true
-                            text: folderDelegate.name
+                            text: folder.name
                             elide: Text.ElideRight
-                            font.bold: folderDelegate.unreadCount > 0
+                            font.pointSize: Theme.fontXs
+                            font.weight: folder.current ? Font.Medium : Font.Normal
+                            color: folder.current ? Theme.accent : (folder.hovered ? Theme.textPrimary : Theme.textSecondary)
                         }
-                        QQC2.Label {
-                            visible: folderDelegate.unreadCount > 0
-                            text: folderDelegate.unreadCount
-                            color: Kirigami.Theme.highlightColor
-                            font.bold: true
+                        Rectangle {
+                            visible: folder.unreadCount > 0
+                            Layout.preferredHeight: 16
+                            Layout.preferredWidth: Math.max(16, countLabel.implicitWidth + 10)
+                            Layout.rightMargin: 6
+                            radius: 8
+                            color: folder.current ? Theme.accent : "transparent"
+                            QQC2.Label {
+                                id: countLabel
+                                anchors.centerIn: parent
+                                text: folder.unreadCount
+                                font.pointSize: Theme.fontXxs
+                                font.weight: Font.DemiBold
+                                color: folder.current ? Theme.accentText : (folder.folderRole === "drafts" ? Theme.warning : Theme.textMuted)
+                            }
                         }
+                    }
+                }
+
+                footer: ColumnLayout {
+                    width: folderList.width - 20
+                    spacing: 6
+                    Item {
+                        Layout.preferredHeight: 14
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        SectionLabel {
+                            Layout.fillWidth: true
+                            leftPadding: 8
+                            text: i18n("Labels & Filters")
+                        }
+                    }
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        leftPadding: 8
+                        text: i18n("Labels will be available in a later version.")
+                        font.pointSize: Theme.fontXxs
+                        color: Theme.textMuted
+                        wrapMode: Text.Wrap
                     }
                 }
             }
         }
 
-        Kirigami.InlineMessage {
+        // Fehlermeldung
+        Rectangle {
             Layout.fillWidth: true
-            Layout.margins: Kirigami.Units.smallSpacing
+            Layout.margins: 10
             visible: App.lastError.length > 0
-            type: Kirigami.MessageType.Error
-            text: App.lastError
-            showCloseButton: true
-            onVisibleChanged: if (!visible) App.dismissError()
+            implicitHeight: errorRow.implicitHeight + 16
+            radius: Theme.radius
+            color: Qt.alpha(Theme.danger, 0.12)
+            border.width: 1
+            border.color: Qt.alpha(Theme.danger, 0.3)
+            RowLayout {
+                id: errorRow
+                anchors.fill: parent
+                anchors.margins: 8
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    text: App.lastError
+                    wrapMode: Text.Wrap
+                    font.pointSize: Theme.fontXxs
+                    color: Theme.textPrimary
+                }
+                IconButton {
+                    iconName: "window-close"
+                    iconSize: 12
+                    tooltip: i18n("Dismiss")
+                    onClicked: App.dismissError()
+                }
+            }
         }
 
-        Kirigami.Separator {
+        // Lokaler Cache
+        Rectangle {
             Layout.fillWidth: true
-        }
-
-        // Synchronisationsstatus
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.margins: Kirigami.Units.smallSpacing
-            QQC2.BusyIndicator {
-                running: App.syncing
-                visible: App.syncing
-                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
-                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+            implicitHeight: 40
+            color: Qt.alpha(Theme.dock, 0.3)
+            Rectangle {
+                width: parent.width
+                height: 1
+                color: Theme.border
             }
-            QQC2.Label {
-                Layout.fillWidth: true
-                text: App.syncing ? i18n("Synchronizing…") : ""
-                color: Kirigami.Theme.disabledTextColor
-                elide: Text.ElideRight
-            }
-            QQC2.ToolButton {
-                icon.name: "view-refresh"
-                text: i18n("Check for new mail")
-                display: QQC2.AbstractButton.IconOnly
-                enabled: !App.syncing
-                QQC2.ToolTip.text: text + " (F5)"
-                QQC2.ToolTip.visible: hovered
-                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-                onClicked: App.syncNow()
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    text: i18n("Local cache")
+                    font.pointSize: Theme.fontXxs
+                    font.weight: Font.Medium
+                    color: Theme.textSecondary
+                }
+                QQC2.Label {
+                    id: cacheLabel
+                    font.pointSize: Theme.fontXxs
+                    font.family: "monospace"
+                    color: Theme.textMuted
+                    text: App.cacheSize()
+                    Connections {
+                        target: App
+                        function onSyncingChanged() {
+                            if (!App.syncing)
+                                cacheLabel.text = App.cacheSize();
+                        }
+                    }
+                }
             }
         }
     }

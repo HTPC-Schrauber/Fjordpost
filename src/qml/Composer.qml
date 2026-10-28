@@ -4,6 +4,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.mopmail.core
+import "components"
 
 // Fenster zum Verfassen einer Nachricht (neu, Antwort, Weiterleitung).
 Kirigami.AbstractApplicationWindow {
@@ -20,6 +21,18 @@ Kirigami.AbstractApplicationWindow {
     height: Kirigami.Units.gridUnit * 34
     minimumWidth: Kirigami.Units.gridUnit * 25
     minimumHeight: Kirigami.Units.gridUnit * 20
+    color: Theme.elevated
+
+    Kirigami.Theme.inherit: false
+    Kirigami.Theme.colorSet: Kirigami.Theme.View
+    Kirigami.Theme.backgroundColor: Theme.elevated
+    Kirigami.Theme.alternateBackgroundColor: Theme.card
+    Kirigami.Theme.textColor: Theme.textPrimary
+    Kirigami.Theme.disabledTextColor: Theme.textMuted
+    Kirigami.Theme.highlightColor: Theme.accent
+    Kirigami.Theme.highlightedTextColor: Theme.accentText
+    Kirigami.Theme.hoverColor: Theme.accent
+    Kirigami.Theme.focusColor: Theme.accent
 
     function collect() {
         return {
@@ -80,45 +93,39 @@ Kirigami.AbstractApplicationWindow {
         anchors.fill: parent
         spacing: 0
 
-        QQC2.ToolBar {
+        Rectangle {
             Layout.fillWidth: true
+            Layout.preferredHeight: 44
+            color: Qt.alpha(Theme.dock, 0.6)
+            Rectangle {
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: 1
+                color: Theme.border
+            }
             RowLayout {
                 anchors.fill: parent
-                QQC2.Button {
-                    text: i18n("Send")
-                    icon.name: "document-send"
-                    highlighted: true
-                    onClicked: composer.send()
+                anchors.leftMargin: 16
+                anchors.rightMargin: 12
+                spacing: 8
+                Rectangle {
+                    Layout.preferredWidth: 10
+                    Layout.preferredHeight: 10
+                    radius: 5
+                    color: Theme.accent
                 }
-                QQC2.ToolButton {
-                    text: i18n("Attach")
-                    icon.name: "mail-attachment"
-                    onClicked: fileDialog.open()
-                }
-                QQC2.ToolButton {
-                    text: i18n("Save Draft")
-                    icon.name: "document-save"
-                    onClicked: composer.saveDraft()
-                }
-                Item {
+                QQC2.Label {
                     Layout.fillWidth: true
+                    text: (composer.data.mode ?? "new") === "new" ? i18n("Compose new message") : (composer.data.mode === "forward" ? i18n("Forward message") : i18n("Reply"))
+                    font.pointSize: Theme.fontXs
+                    font.weight: Font.DemiBold
+                    color: Theme.textPrimary
                 }
-                QQC2.ToolButton {
+                IconButton {
                     text: i18n("Cc/Bcc")
-                    checkable: true
-                    checked: ccRow.visible
-                    onToggled: ccRow.visible = bccRow.visible = checked
-                }
-                QQC2.ToolButton {
-                    icon.name: "edit-delete"
-                    text: i18n("Discard")
-                    display: QQC2.AbstractButton.IconOnly
-                    QQC2.ToolTip.text: text
-                    QQC2.ToolTip.visible: hovered
-                    onClicked: {
-                        composer.closingConfirmed = true;
-                        composer.close();
-                    }
+                    display: QQC2.AbstractButton.TextOnly
+                    active: ccRow.visible
+                    onClicked: ccRow.visible = bccRow.visible = !ccRow.visible
                 }
             }
         }
@@ -132,13 +139,15 @@ Kirigami.AbstractApplicationWindow {
 
         GridLayout {
             Layout.fillWidth: true
-            Layout.margins: Kirigami.Units.largeSpacing
+            Layout.leftMargin: 16
+            Layout.rightMargin: 16
+            Layout.topMargin: 12
             columns: 2
-            columnSpacing: Kirigami.Units.largeSpacing
+            columnSpacing: 12
+            rowSpacing: 4
 
-            QQC2.Label {
+            FieldLabel {
                 text: i18n("From:")
-                Layout.alignment: Qt.AlignRight
             }
             QQC2.ComboBox {
                 id: fromBox
@@ -149,11 +158,10 @@ Kirigami.AbstractApplicationWindow {
                 Component.onCompleted: currentIndex = Math.max(0, indexOfValue(composer.data.accountId))
             }
 
-            QQC2.Label {
+            FieldLabel {
                 text: i18n("To:")
-                Layout.alignment: Qt.AlignRight
             }
-            QQC2.TextField {
+            Field {
                 id: toField
                 Layout.fillWidth: true
                 text: composer.data.to ?? ""
@@ -161,12 +169,11 @@ Kirigami.AbstractApplicationWindow {
                 onTextEdited: composer.dirty = true
             }
 
-            QQC2.Label {
+            FieldLabel {
                 text: i18n("Cc:")
-                Layout.alignment: Qt.AlignRight
                 visible: ccRow.visible
             }
-            QQC2.TextField {
+            Field {
                 id: ccField
                 Layout.fillWidth: true
                 visible: ccRow.visible
@@ -174,23 +181,21 @@ Kirigami.AbstractApplicationWindow {
                 onTextEdited: composer.dirty = true
             }
 
-            QQC2.Label {
+            FieldLabel {
                 text: i18n("Bcc:")
-                Layout.alignment: Qt.AlignRight
                 visible: bccRow.visible
             }
-            QQC2.TextField {
+            Field {
                 id: bccField
                 Layout.fillWidth: true
                 visible: bccRow.visible
                 onTextEdited: composer.dirty = true
             }
 
-            QQC2.Label {
+            FieldLabel {
                 text: i18n("Subject:")
-                Layout.alignment: Qt.AlignRight
             }
-            QQC2.TextField {
+            Field {
                 id: subjectField
                 Layout.fillWidth: true
                 text: composer.data.subject ?? ""
@@ -245,10 +250,12 @@ Kirigami.AbstractApplicationWindow {
 
             QQC2.TextArea {
                 id: bodyArea
+                color: Theme.textPrimary
+                placeholderText: i18n("Write your message…")
+                placeholderTextColor: Theme.textMuted
                 text: composer.data.body ?? ""
                 wrapMode: TextEdit.Wrap
                 textFormat: TextEdit.PlainText
-                font.family: "monospace"
                 leftPadding: Kirigami.Units.gridUnit
                 rightPadding: Kirigami.Units.gridUnit
                 topPadding: Kirigami.Units.largeSpacing
@@ -259,6 +266,55 @@ Kirigami.AbstractApplicationWindow {
                         composer.send();
                         event.accepted = true;
                     }
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 52
+            color: Qt.alpha(Theme.dock, 0.4)
+            Rectangle {
+                width: parent.width
+                height: 1
+                color: Theme.border
+            }
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 16
+                spacing: 4
+                IconButton {
+                    iconName: "mail-attachment"
+                    tooltip: i18n("Attach files")
+                    onClicked: fileDialog.open()
+                }
+                IconButton {
+                    iconName: "document-save"
+                    tooltip: i18n("Save draft")
+                    onClicked: composer.saveDraft()
+                }
+                IconButton {
+                    iconName: "object-locked"
+                    tooltip: i18n("Encryption (OpenPGP/S/MIME) follows in a later version")
+                    enabled: false
+                }
+                Item {
+                    Layout.fillWidth: true
+                }
+                IconButton {
+                    text: i18n("Discard")
+                    display: QQC2.AbstractButton.TextOnly
+                    onClicked: {
+                        composer.closingConfirmed = true;
+                        composer.close();
+                    }
+                }
+                AccentButton {
+                    text: i18n("Send")
+                    iconName: "document-send"
+                    iconAfterText: true
+                    onClicked: composer.send()
                 }
             }
         }
@@ -291,6 +347,27 @@ Kirigami.AbstractApplicationWindow {
         onDiscarded: {
             composer.closingConfirmed = true;
             composer.close();
+        }
+    }
+
+    component FieldLabel: QQC2.Label {
+        Layout.preferredWidth: 64
+        font.pointSize: Theme.fontXs
+        color: Theme.textMuted
+    }
+
+    component Field: QQC2.TextField {
+        font.pointSize: Theme.fontXs
+        color: Theme.textPrimary
+        placeholderTextColor: Theme.textMuted
+        leftPadding: 0
+        background: Item {
+            Rectangle {
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: 1
+                color: Theme.border
+            }
         }
     }
 

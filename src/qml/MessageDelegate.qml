@@ -2,13 +2,13 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.kde.kirigamiaddons.components as Components
 import org.mopmail.core
+import "components"
 
-// Eine Zeile der Nachrichtenliste: Avatar, Absender, Datum, Betreff, Vorschau.
-// Beim Überfahren erscheinen Schnellaktionen anstelle des Datums.
+// Nachrichtenkarte: Absender, Zeit, Betreff, Vorschau, Etiketten.
+// Beim Überfahren erscheinen Schnellaktionen anstelle der Zeit.
 QQC2.ItemDelegate {
-    id: delegate
+    id: card
 
     required property int index
     required property var messageId
@@ -21,125 +21,157 @@ QQC2.ItemDelegate {
     required property bool flagged
     required property bool hasAttachments
     required property color accountColor
+    required property string folderName
 
-    highlighted: ListView.isCurrentItem
+    readonly property bool active: ListView.isCurrentItem
+    readonly property bool unified: App.selectedAccountId === 0
+
     hoverEnabled: true
-    topPadding: Kirigami.Units.largeSpacing
-    bottomPadding: Kirigami.Units.largeSpacing
-    leftPadding: Kirigami.Units.largeSpacing
-    rightPadding: Kirigami.Units.largeSpacing
+    padding: 14
+    topPadding: 12
+    bottomPadding: 12
 
     onClicked: {
         ListView.view.currentIndex = index;
         ListView.view.forceActiveFocus();
     }
 
-    // Kontofarbe als schmaler Streifen links (hilfreich in der Unified Inbox)
-    Rectangle {
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        width: 3
-        color: delegate.accountColor
-        visible: App.selectedAccountId === 0
+    background: Rectangle {
+        color: card.active ? Qt.alpha(Theme.accent, Theme.dark ? 0.11 : 0.08) : (card.hovered ? Qt.alpha(Theme.card, 0.5) : "transparent")
+        Rectangle {
+            visible: card.active
+            width: 3
+            height: parent.height
+            color: Theme.accent
+        }
+        Rectangle {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: 1
+            color: Theme.border
+        }
     }
 
-    contentItem: RowLayout {
-        spacing: Kirigami.Units.largeSpacing
+    contentItem: ColumnLayout {
+        spacing: 4
 
-        Item {
-            Layout.alignment: Qt.AlignTop
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 2.2
-            Layout.preferredHeight: Kirigami.Units.gridUnit * 2.2
-
-            Components.Avatar {
-                anchors.fill: parent
-                name: delegate.fromName
-            }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
             Rectangle {
-                visible: delegate.unread
-                anchors.left: parent.left
-                anchors.top: parent.top
-                width: Kirigami.Units.smallSpacing * 2.5
-                height: width
-                radius: width / 2
-                color: Kirigami.Theme.highlightColor
-                border.color: Kirigami.Theme.backgroundColor
-                border.width: 1
+                visible: card.unread
+                Layout.preferredWidth: 8
+                Layout.preferredHeight: 8
+                radius: 4
+                color: Theme.accent
+            }
+            QQC2.Label {
+                Layout.fillWidth: true
+                text: card.fromName
+                elide: Text.ElideRight
+                font.pointSize: Theme.fontXs
+                font.weight: card.unread ? Font.DemiBold : Font.Medium
+                color: card.unread ? Theme.textPrimary : Theme.textSecondary
+            }
+            QQC2.Label {
+                visible: !card.hovered
+                text: card.dateText
+                font.family: "monospace"
+                font.pointSize: Theme.fontXxs
+                color: Theme.textMuted
+            }
+            Row {
+                visible: card.hovered
+                spacing: 0
+                IconButton {
+                    implicitWidth: 22
+                    implicitHeight: 20
+                    iconSize: 13
+                    iconName: "archive-insert"
+                    tooltip: i18n("Archive (E)")
+                    onClicked: App.archiveMessage(card.messageId)
+                }
+                IconButton {
+                    implicitWidth: 22
+                    implicitHeight: 20
+                    iconSize: 13
+                    iconName: "edit-delete"
+                    tooltip: i18n("Delete (Del)")
+                    onClicked: App.deleteMessage(card.messageId)
+                }
+                IconButton {
+                    implicitWidth: 22
+                    implicitHeight: 20
+                    iconSize: 13
+                    iconName: card.unread ? "mail-mark-read" : "mail-mark-unread"
+                    tooltip: card.unread ? i18n("Mark as read") : i18n("Mark as unread (U)")
+                    onClicked: App.setRead(card.messageId, card.unread)
+                }
             }
         }
 
-        ColumnLayout {
+        QQC2.Label {
             Layout.fillWidth: true
-            spacing: 0
+            text: card.subject
+            elide: Text.ElideRight
+            font.pointSize: Theme.fontXs
+            font.weight: card.unread ? Font.DemiBold : Font.Normal
+            color: card.unread ? Theme.textPrimary : Theme.textSecondary
+        }
 
-            RowLayout {
-                Layout.fillWidth: true
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    text: delegate.fromName
-                    elide: Text.ElideRight
-                    font.bold: delegate.unread
-                }
-                Kirigami.Icon {
-                    visible: delegate.hasAttachments && !delegate.hovered
-                    source: "mail-attachment"
-                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                }
-                Kirigami.Icon {
-                    visible: delegate.flagged && !delegate.hovered
-                    source: "flag-red"
-                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                }
-                QQC2.Label {
-                    visible: !delegate.hovered
-                    text: delegate.dateText
-                    font: Kirigami.Theme.smallFont
-                    color: delegate.unread ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
-                }
+        QQC2.Label {
+            Layout.fillWidth: true
+            text: card.snippet
+            elide: Text.ElideRight
+            maximumLineCount: 1
+            font.pointSize: Theme.fontXxs
+            color: Theme.textMuted
+        }
 
-                // Schnellaktionen
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: 4
+            spacing: 6
+            visible: card.unified || card.hasAttachments || card.flagged
+
+            Tag {
+                visible: card.unified
+                text: card.folderName
+                tint: card.accountColor
+            }
+            Rectangle {
+                visible: card.hasAttachments
+                implicitWidth: clipRow.implicitWidth + 10
+                implicitHeight: 18
+                radius: 4
+                color: Theme.card
                 Row {
-                    visible: delegate.hovered
-                    spacing: 0
-                    Repeater {
-                        model: [
-                            { icon: "archive-insert", tip: i18n("Archive (E)"), act: () => App.archiveMessage(delegate.messageId) },
-                            { icon: "edit-delete", tip: i18n("Delete (Del)"), act: () => App.deleteMessage(delegate.messageId) },
-                            { icon: delegate.flagged ? "flag-red" : "flag", tip: i18n("Flag (S)"), act: () => App.toggleFlagged(delegate.messageId) },
-                            { icon: delegate.unread ? "mail-mark-read" : "mail-mark-unread", tip: delegate.unread ? i18n("Mark as read") : i18n("Mark as unread (U)"), act: () => App.setRead(delegate.messageId, delegate.unread) },
-                        ]
-                        QQC2.ToolButton {
-                            required property var modelData
-                            icon.name: modelData.icon
-                            display: QQC2.AbstractButton.IconOnly
-                            implicitHeight: Kirigami.Units.gridUnit * 1.2
-                            implicitWidth: implicitHeight
-                            QQC2.ToolTip.text: modelData.tip
-                            QQC2.ToolTip.visible: hovered
-                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-                            onClicked: modelData.act()
-                        }
+                    id: clipRow
+                    anchors.centerIn: parent
+                    spacing: 3
+                    Kirigami.Icon {
+                        width: 10
+                        height: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        source: "mail-attachment"
+                        isMask: true
+                        color: Theme.textMuted
                     }
                 }
             }
-
-            QQC2.Label {
+            Item {
                 Layout.fillWidth: true
-                text: delegate.subject
-                elide: Text.ElideRight
-                font.bold: delegate.unread
             }
-
-            QQC2.Label {
-                Layout.fillWidth: true
-                text: delegate.snippet
-                elide: Text.ElideRight
-                maximumLineCount: 1
-                color: Kirigami.Theme.disabledTextColor
-                font: Kirigami.Theme.smallFont
+            QQC2.AbstractButton {
+                implicitWidth: 16
+                implicitHeight: 16
+                visible: card.flagged || card.hovered
+                onClicked: App.toggleFlagged(card.messageId)
+                contentItem: Kirigami.Icon {
+                    source: card.flagged ? "starred-symbolic" : "non-starred-symbolic"
+                    isMask: true
+                    color: card.flagged ? Theme.star : Theme.textMuted
+                }
             }
         }
     }

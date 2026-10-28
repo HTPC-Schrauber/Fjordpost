@@ -32,7 +32,11 @@ target_link_libraries(mopmailcore PUBLIC
 add_executable(mopmail main.cpp integration/remotecontentblocker.cpp)
 
 ecm_add_qml_module(mopmail URI org.mopmail.app GENERATE_PLUGIN_SOURCE)
+set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 ecm_target_qml_sources(mopmail SOURCES
+    qml/Theme.qml
+    qml/HeaderBar.qml
+    qml/ContextDrawer.qml
     qml/Main.qml
     qml/AppRail.qml
     qml/FolderPane.qml
@@ -42,6 +46,17 @@ ecm_target_qml_sources(mopmail SOURCES
     qml/RailButton.qml
     qml/Composer.qml
     qml/AccountSetupDialog.qml
+)
+ecm_target_qml_sources(mopmail PATH components SOURCES
+    qml/components/AccentButton.qml
+    qml/components/IconButton.qml
+    qml/components/InitialsAvatar.qml
+    qml/components/Kbd.qml
+    qml/components/Pill.qml
+    qml/components/SearchBox.qml
+    qml/components/SectionLabel.qml
+    qml/components/Tag.qml
+    qml/components/Toast.qml
 )
 
 target_link_libraries(mopmail PRIVATE

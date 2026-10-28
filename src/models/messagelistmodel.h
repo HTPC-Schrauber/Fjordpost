@@ -26,6 +26,9 @@ public:
         AnsweredRole,
         HasAttachmentsRole,
         AccountColorRole,
+        DateGroupRole,
+        InitialsRole,
+        FolderNameRole,
     };
 
     struct Filter {
@@ -33,6 +36,7 @@ public:
         qint64 folderId = 0;  // > 0: genau dieser Ordner
         QString role;         // sonst: alle Ordner dieser Rolle
         QString search;       // FTS5-Suche, überschreibt Ordnerauswahl
+        QString quick;        // Schnellfilter: "", "unread", "flagged", "attachments"
     };
 
     explicit MessageListModel(QObject *parent = nullptr);
@@ -51,6 +55,7 @@ public:
     void removeMessage(qint64 messageId);
 
     Q_INVOKABLE int rowOf(qint64 messageId) const;
+    Q_INVOKABLE qint64 idAt(int row) const;
 
 public Q_SLOTS:
     void reload();
@@ -72,10 +77,12 @@ private:
         int flags = 0;
         bool hasAttachments = false;
         QColor accountColor;
+        QString folderName;
     };
 
     QList<Row> fetchPage(int offset, int limit) const;
     static QString formatDate(const QDateTime &date);
+    static QString dateGroup(const QDateTime &date);
     static QString ftsQuery(const QString &text);
 
     Filter m_filter;
