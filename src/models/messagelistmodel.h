@@ -3,6 +3,9 @@
 #include <QAbstractListModel>
 #include <QColor>
 #include <QDateTime>
+#include <QSet>
+
+class QSqlQuery;
 
 namespace Fjordpost {
 
@@ -29,6 +32,10 @@ public:
         DateGroupRole,
         InitialsRole,
         FolderNameRole,
+        ThreadCountRole,
+        ExpandedRole,  // Konversation aufgeklappt
+        IsChildRole,   // ältere Nachricht unter einer aufgeklappten Konversation
+        SentRole,      // liegt in "Gesendet"
     };
 
     struct Filter {
@@ -37,6 +44,7 @@ public:
         QString role;         // sonst: alle Ordner dieser Rolle
         QString search;       // FTS5-Suche, überschreibt Ordnerauswahl
         QString quick;        // Schnellfilter: "", "unread", "flagged", "attachments"
+        bool threaded = false; // eine Zeile pro Konversation (neueste passende Nachricht)
     };
 
     explicit MessageListModel(QObject *parent = nullptr);
@@ -50,10 +58,13 @@ public:
     bool canFetchMore(const QModelIndex &parent) const override;
     void fetchMore(const QModelIndex &parent) override;
 
-    // Aktualisiert Flags einer Zeile ohne Neuladen der ganzen Liste.
+    // Aktualisiert Flags einer Zeile ohne Neuladen der ganzen Liste
+    // (in der Konversationsansicht wird neu abgefragt, da andere Nachrichten mitzählen).
     void updateFlags(qint64 messageId, int flags);
     void removeMessage(qint64 messageId);
 
+    // Klappt die Konversation der Zeile auf bzw. zu.
+    Q_INVOKABLE void toggleThread(qint64 messageId);
     Q_INVOKABLE int rowOf(qint64 messageId) const;
     Q_INVOKABLE qint64 idAt(int row) const;
 
@@ -78,15 +89,28 @@ private:
         bool hasAttachments = false;
         QColor accountColor;
         QString folderName;
+        int threadCount = 1;
+        int threadUnread = 0;
+        qint64 threadId = 0;
+        bool child = false;
+        bool sent = false;
+        QDateTime groupDate; // Datumsgruppe; bei Unterzeilen die der Konversation
+
+        bool operator==(const Row &) const = default;
     };
 
     QList<Row> fetchPage(int offset, int limit) const;
+    // Fügt unter aufgeklappten Konversationen deren übrige Nachrichten ein.
+    QList<Row> withChildren(const QList<Row> &topLevel) const;
+    static Row rowFromQuery(const QSqlQuery &q);
     static QString formatDate(const QDateTime &date);
     static QString dateGroup(const QDateTime &date);
     static QString ftsQuery(const QString &text);
 
     Filter m_filter;
     QList<Row> m_rows;
+    int m_topLevelCount = 0; // Zeilen ohne Unterzeilen (für das seitenweise Nachladen)
+    QSet<qint64> m_expandedThreads;
     bool m_hasMore = false;
 };
 

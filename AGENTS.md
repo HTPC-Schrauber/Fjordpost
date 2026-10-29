@@ -34,7 +34,7 @@ build/bin/fjordpost --demo --offline --data-dir /tmp/fjordpost-demo
 | `--offline` | keine Serververbindungen |
 | `--data-dir <dir>` | eigenes Datenverzeichnis (echte Daten nie für Tests nutzen) |
 | `--screenshot <png>` | Fenster nach 3 s als Bild speichern und beenden (startet auch neben laufender Instanz) |
-| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light`, `undo-send` |
+| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light`, `undo-send`, `open-thread`, `expand-thread`, `thread-history` |
 
 Oberflächenänderungen immer per `--screenshot` prüfen und die Konsolenausgabe auf
 QML-Warnungen kontrollieren. Achtung: `--dev-action light` speichert den hellen Modus in
@@ -132,7 +132,7 @@ Die Oberfläche folgt dem Entwurf `mopmail_ui.html` des Projektinhabers:
 |---|---|---|
 | M0 | Grundgerüst, DB, Oberfläche mit Demo-Daten | fertig |
 | M1 | IMAP + SMTP, Kontoeinrichtung, Lesen/Schreiben, Design-Umbau | fertig, Servertest grün; manueller Oberflächentest offen |
-| M2 | POP3, Threading, Snooze, Labels, Filterregeln, Signaturen, Senden rückgängig, Import/Export | begonnen: Signaturen, Senden rückgängig |
+| M2 | POP3, Threading, Snooze, Labels, Filterregeln, Signaturen, Senden rückgängig, Import/Export | begonnen: Signaturen, Senden rückgängig, Konversationen |
 | M3 | CardDAV/CalDAV, Kalender, Kontakte, Aufgaben, Einladungen | geplant |
 | M4 | Google OAuth2 (Gmail, Kontakte, Kalender) | geplant |
 | M5 | OpenPGP + S/MIME (QGpgME) | geplant |

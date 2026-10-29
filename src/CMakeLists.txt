@@ -45,6 +45,7 @@ ecm_target_qml_sources(fjordpost SOURCES
     qml/FolderPane.qml
     qml/MessageListPane.qml
     qml/MessageDelegate.qml
+    qml/ThreadChildDelegate.qml
     qml/ReaderPane.qml
     qml/RailButton.qml
     qml/ComposerForm.qml

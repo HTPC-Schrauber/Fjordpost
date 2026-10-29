@@ -38,6 +38,8 @@ class AppController : public QObject
     Q_PROPERTY(QString selectionSubtitle READ selectionSubtitle NOTIFY selectionChanged)
     // Sekunden, die eine Nachricht nach "Senden" im Postausgang wartet (0 = sofort)
     Q_PROPERTY(int undoSendSeconds READ undoSendSeconds WRITE setUndoSendSeconds NOTIFY undoSendSecondsChanged)
+    // Eine Zeile pro Konversation; Aktionen wirken dann auf die ganze Konversation
+    Q_PROPERTY(bool conversationView READ conversationView WRITE setConversationView NOTIFY conversationViewChanged)
 
 public:
     AppController(AccountManager *accounts, MailService *mail, AccountSetup *setup, QObject *parent = nullptr);
@@ -64,6 +66,8 @@ public:
     QString selectionSubtitle() const;
     int undoSendSeconds() const { return m_undoSendSeconds; }
     void setUndoSendSeconds(int seconds);
+    bool conversationView() const { return m_conversationView; }
+    void setConversationView(bool enabled);
 
     // 0 = Unified Inbox (alle Konten)
     Q_INVOKABLE void selectAccount(qint64 accountId);
@@ -117,13 +121,18 @@ Q_SIGNALS:
     void quickFilterChanged();
     void notify(const QString &message);
     void undoSendSecondsChanged();
+    void conversationViewChanged();
     // draft enthält die Composer-Daten, um die Nachricht nach dem Rückgängigmachen
     // wieder zu öffnen.
     void messageQueued(qint64 outboxId, int delaySeconds, const QVariantMap &draft);
 
 private:
     void applyFilter();
-    void setFlags(qint64 messageId, int flags, const QString &imapChange);
+    void setFlags(qint64 messageId, int flags, const QString &imapChange, bool batch = false);
+    void applyRead(const QList<qint64> &messageIds, bool read);
+    QList<qint64> affectedMessages(qint64 messageId) const;
+    void afterRemoval(const QList<qint64> &messageIds);
+    QVariantList threadEntries(qint64 messageId) const;
     void refreshCounts();
     void loadCurrent(qint64 messageId);
     void setError(const QString &message);
@@ -149,6 +158,7 @@ private:
     QString m_quickFilter;
     QStringList m_readerColors;
     int m_undoSendSeconds = 0;
+    bool m_conversationView = false;
 };
 
 } // namespace Fjordpost

@@ -76,6 +76,12 @@ MessageLocation location(qint64 messageId);
 QList<qint64> messagesWithoutBody(qint64 folderId, int limit, qint64 maxSize);
 // Lokal verschoben: neuer Ordner, UID unbekannt bis zur nächsten Synchronisation.
 void moveLocally(qint64 messageId, qint64 targetFolderId);
+// Nachrichten der Konversation (chronologisch), ohne Papierkorb/Spam – es sei denn,
+// die Nachricht liegt selbst dort. sameFolder: nur aus ihrem Ordner.
+QList<qint64> threadMessages(qint64 messageId, bool sameFolder = false);
+// Ordnet einmalig alle Nachrichten neu den Konversationen zu (Bestände aus älteren
+// Versionen); danach nur, wenn sich das Verfahren ändert. Liefert die Zahl geänderter Nachrichten.
+int rebuildThreads();
 
 // Offline-Operationen
 void enqueueOp(qint64 accountId, const QString &op, const QString &folderPath, qint64 uid, const QString &argument = {});

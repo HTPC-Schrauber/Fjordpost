@@ -50,7 +50,9 @@ qint64 insertFolder(qint64 accountId, const QString &path, const QString &name, 
     return q.lastInsertId().toLongLong();
 }
 
-void insertMail(qint64 accountId, qint64 folderId, const DemoMail &m, const QDateTime &date, int flags)
+// Liefert die ID; ohne thread wird die Nachricht ihr eigener Thread.
+qint64 insertMail(qint64 accountId, qint64 folderId, const DemoMail &m, const QDateTime &date, int flags, const QString &messageId = {},
+                  const QString &inReplyTo = {}, qint64 thread = 0)
 {
     const QString body = QString::fromUtf8(m.body);
     QString snippet = body.simplified();
@@ -58,8 +60,8 @@ void insertMail(qint64 accountId, qint64 folderId, const DemoMail &m, const QDat
 
     QSqlQuery q(Database::connection());
     q.prepare(QStringLiteral(
-        "INSERT INTO messages (account_id, folder_id, subject, from_name, from_email, to_list, date, flags, snippet, body_text) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "INSERT INTO messages (account_id, folder_id, subject, from_name, from_email, to_list, date, flags, snippet, body_text, "
+        "message_id, in_reply_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     q.addBindValue(accountId);
     q.addBindValue(folderId);
     q.addBindValue(QString::fromUtf8(m.subject));
@@ -70,7 +72,61 @@ void insertMail(qint64 accountId, qint64 folderId, const DemoMail &m, const QDat
     q.addBindValue(flags);
     q.addBindValue(snippet);
     q.addBindValue(body);
+    q.addBindValue(messageId.isNull() ? QStringLiteral("") : messageId);
+    q.addBindValue(inReplyTo.isNull() ? QStringLiteral("") : inReplyTo);
     q.exec();
+    const qint64 id = q.lastInsertId().toLongLong();
+
+    QSqlQuery t(Database::connection());
+    t.prepare(QStringLiteral("UPDATE messages SET thread_id = ? WHERE id = ?"));
+    t.addBindValue(thread > 0 ? thread : id);
+    t.addBindValue(id);
+    t.exec();
+    return id;
+}
+
+// Längere Abstimmung im Wechsel (zum Testen des zusammengefassten Verlaufs)
+void insertLongConversation(qint64 accountId, qint64 inbox, qint64 sent, const QDateTime &now)
+{
+    const char *const texts[] = {
+        "Hallo Max,\n\nkönnen wir das Release auf Mittwoch legen?",
+        "Mittwoch passt, ich bereite die Notizen vor.",
+        "Danke! Brauchst Du noch die Übersetzungen?",
+        "Ja, bis Dienstag wäre super.",
+        "Die Übersetzungen liegen im Repository.",
+        "Perfekt, dann taggen wir am Mittwoch um 10 Uhr.",
+        "Release ist raus – danke für die Hilfe!",
+    };
+    qint64 thread = 0;
+    QString previous;
+    const int count = int(std::size(texts));
+    for (int i = 0; i < count; ++i) {
+        const bool mine = i % 2 == 1;
+        const DemoMail m{mine ? "Max Mustermann" : "Sabine Roth", mine ? "max.mustermann@firma.example" : "s.roth@firma.example",
+                         i == 0 ? "Release-Termin" : "Re: Release-Termin", texts[i]};
+        const QString id = QStringLiteral("<release-%1@firma.example>").arg(i);
+        const qint64 inserted = insertMail(accountId, mine ? sent : inbox, m, now.addSecs(-qint64(count - i) * 4 * 3600),
+                                           (i == count - 1) ? 0 : MessageFlag::Seen, id, previous, thread);
+        if (thread == 0)
+            thread = inserted;
+        previous = id;
+    }
+}
+
+// Eine Konversation über Posteingang und Gesendet
+void insertConversation(qint64 accountId, qint64 inbox, qint64 sent, const QDateTime &now)
+{
+    const DemoMail first{"Lisa Hoffmann", "lisa@hoffmann.example", "Planung Sommerfest",
+                         "Hallo zusammen,\n\nwir sollten langsam das Sommerfest planen. Wer kümmert sich um den Grill?\n\nLisa"};
+    const DemoMail reply{"Max Mustermann", "max@example.de", "Re: Planung Sommerfest",
+                         "Hi Lisa,\n\nden Grill bringe ich mit. Soll ich auch Getränke organisieren?\n\nMax"};
+    const DemoMail answer{"Lisa Hoffmann", "lisa@hoffmann.example", "Re: Planung Sommerfest",
+                          "Super, danke! Getränke übernimmt Thomas. Dann sehen wir uns am Samstag um 15 Uhr.\n\nLisa"};
+    const qint64 thread = insertMail(accountId, inbox, first, now.addDays(-3), MessageFlag::Seen, QStringLiteral("<fest-1@hoffmann.example>"));
+    insertMail(accountId, sent, reply, now.addDays(-2), MessageFlag::Seen | MessageFlag::Answered, QStringLiteral("<fest-2@example.de>"),
+               QStringLiteral("<fest-1@hoffmann.example>"), thread);
+    insertMail(accountId, inbox, answer, now.addSecs(-5 * 3600), 0, QStringLiteral("<fest-3@hoffmann.example>"), QStringLiteral("<fest-2@example.de>"),
+               thread);
 }
 
 void seedAccount(AccountManager &accounts, const QString &name, const QString &email, const QColor &color, AccountType type, int offset)
@@ -106,6 +162,10 @@ void seedAccount(AccountManager &accounts, const QString &name, const QString &e
         insertMail(a.id, inbox, m, date, flags);
     }
     insertMail(a.id, sent, demoMails[3], now.addDays(-2), MessageFlag::Seen);
+    if (offset == 0)
+        insertConversation(a.id, inbox, sent, now);
+    if (offset == 1)
+        insertLongConversation(a.id, inbox, sent, now);
 }
 
 } // namespace

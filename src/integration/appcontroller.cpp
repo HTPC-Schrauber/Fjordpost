@@ -298,6 +298,7 @@ void AppController::applyFilter()
     f.role = m_role;
     f.search = m_search;
     f.quick = m_quickFilter;
+    f.threaded = m_conversationView;
     m_messageModel->setFilter(f);
 
     if (!m_current.isEmpty()) {
@@ -331,11 +332,9 @@ void AppController::openMessage(qint64 messageId)
         m_remoteAllowed = false;
         Q_EMIT remoteContentAllowedChanged();
     }
+    // Erst als gelesen markieren, damit die Konversationsleiste den neuen Stand zeigt.
+    setRead(messageId, true);
     loadCurrent(messageId);
-
-    const MessageLocation loc = MailStore::location(messageId);
-    if (loc.id > 0 && !(loc.flags & MessageFlag::Seen))
-        setFlags(messageId, loc.flags | MessageFlag::Seen, QStringLiteral("+\\Seen"));
 }
 
 void AppController::loadCurrent(qint64 messageId)
@@ -374,6 +373,7 @@ void AppController::loadCurrent(qint64 messageId)
         {QStringLiteral("hasRemoteContent"), false},
         {QStringLiteral("attachments"), QVariantList()},
         {QStringLiteral("folderName"), folderDisplayName(messageId)},
+        {QStringLiteral("thread"), threadEntries(messageId)},
     };
 
     if (bodyFetched && !blobPath.isEmpty()) {
@@ -404,6 +404,33 @@ void AppController::loadCurrent(qint64 messageId)
         m_current[QStringLiteral("html")] = plainTextToHtml(q.value(8).toString(), m_readerColors);
     }
     Q_EMIT currentMessageChanged();
+}
+
+QVariantList AppController::threadEntries(qint64 messageId) const
+{
+    const QList<qint64> ids = MailStore::threadMessages(messageId);
+    if (ids.size() < 2)
+        return {};
+    QVariantList result;
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT m.from_name, m.from_email, m.date, m.snippet, m.flags, f.role, f.name FROM messages m "
+                             "JOIN folders f ON f.id = m.folder_id WHERE m.id = ?"));
+    for (qint64 id : ids) {
+        q.addBindValue(id);
+        if (!q.exec() || !q.next())
+            continue;
+        const QString name = q.value(0).toString();
+        result << QVariantMap{
+            {QStringLiteral("id"), id},
+            {QStringLiteral("fromName"), name.isEmpty() ? q.value(1).toString() : name},
+            {QStringLiteral("dateText"), mediumDate(QDateTime::fromSecsSinceEpoch(q.value(2).toLongLong()))},
+            {QStringLiteral("snippet"), q.value(3).toString()},
+            {QStringLiteral("unread"), (q.value(4).toInt() & MessageFlag::Seen) == 0},
+            {QStringLiteral("sent"), q.value(5).toString() == QLatin1String(FolderRole::Sent)},
+            {QStringLiteral("current"), id == messageId},
+        };
+    }
+    return result;
 }
 
 void AppController::allowRemoteContent()
@@ -462,20 +489,21 @@ QString AppController::cacheSize() const
 
 void AppController::markAllRead()
 {
-    // Alle sichtbaren ungelesenen Nachrichten der aktuellen Liste
+    // Alle sichtbaren ungelesenen Nachrichten (bzw. Konversationen) der aktuellen Liste
     QList<qint64> ids;
     for (int row = 0; row < m_messageModel->rowCount(); ++row) {
         const QModelIndex idx = m_messageModel->index(row);
-        if (idx.data(MessageListModel::UnreadRole).toBool())
-            ids << idx.data(MessageListModel::MessageIdRole).toLongLong();
+        if (!idx.data(MessageListModel::UnreadRole).toBool())
+            continue;
+        const qint64 id = idx.data(MessageListModel::MessageIdRole).toLongLong();
+        ids << (m_conversationView ? MailStore::threadMessages(id) : QList<qint64>{id});
     }
-    for (qint64 id : std::as_const(ids))
-        setRead(id, true);
+    applyRead(ids, true);
 }
 
 // ---------------------------------------------------------------- Aktionen
 
-void AppController::setFlags(qint64 messageId, int flags, const QString &imapChange)
+void AppController::setFlags(qint64 messageId, int flags, const QString &imapChange, bool batch)
 {
     const MessageLocation loc = MailStore::location(messageId);
     if (loc.id == 0)
@@ -485,19 +513,38 @@ void AppController::setFlags(qint64 messageId, int flags, const QString &imapCha
         MailStore::enqueueOp(loc.accountId, QStringLiteral("flags"), loc.folderPath, loc.uid, imapChange);
         m_mail->flushPendingOps(loc.accountId);
     }
-    m_messageModel->updateFlags(messageId, flags);
     if (m_current.value(QStringLiteral("id")).toLongLong() == messageId) {
         m_current[QStringLiteral("flagged")] = (flags & MessageFlag::Flagged) != 0;
         m_current[QStringLiteral("unread")] = (flags & MessageFlag::Seen) == 0;
         Q_EMIT currentMessageChanged();
     }
+    // Bei mehreren Nachrichten aktualisiert der Aufrufer Liste und Zähler einmal am Ende.
+    if (batch)
+        return;
+    m_messageModel->updateFlags(messageId, flags);
+    refreshCounts();
+}
+
+void AppController::applyRead(const QList<qint64> &messageIds, bool read)
+{
+    bool changed = false;
+    for (qint64 id : messageIds) {
+        const int flags = MailStore::location(id).flags;
+        if (((flags & MessageFlag::Seen) != 0) == read)
+            continue;
+        setFlags(id, read ? (flags | MessageFlag::Seen) : (flags & ~MessageFlag::Seen), read ? QStringLiteral("+\\Seen") : QStringLiteral("-\\Seen"), true);
+        changed = true;
+    }
+    if (!changed)
+        return;
+    m_messageModel->refresh();
     refreshCounts();
 }
 
 void AppController::setRead(qint64 messageId, bool read)
 {
-    const int flags = MailStore::location(messageId).flags;
-    setFlags(messageId, read ? (flags | MessageFlag::Seen) : (flags & ~MessageFlag::Seen), read ? QStringLiteral("+\\Seen") : QStringLiteral("-\\Seen"));
+    // Gelesen gilt für die ganze Konversation; als ungelesen reicht eine Nachricht.
+    applyRead(m_conversationView && read ? MailStore::threadMessages(messageId) : QList<qint64>{messageId}, read);
 }
 
 void AppController::toggleFlagged(qint64 messageId)
@@ -507,52 +554,75 @@ void AppController::toggleFlagged(qint64 messageId)
     setFlags(messageId, flags ^ MessageFlag::Flagged, flag ? QStringLiteral("+\\Flagged") : QStringLiteral("-\\Flagged"));
 }
 
-void AppController::moveToRole(qint64 messageId, const QString &role)
+QList<qint64> AppController::affectedMessages(qint64 messageId) const
 {
-    const MessageLocation loc = MailStore::location(messageId);
-    if (loc.id == 0)
-        return;
-    const qint64 target = MailStore::ensureFolderForRole(loc.accountId, role);
-    if (target == 0 || target == loc.folderId) {
-        if (target == 0)
-            Q_EMIT notify(i18n("This account has no folder for this action."));
-        return;
+    // In der Konversationsansicht wirken Verschieben/Löschen auf alle Nachrichten
+    // der Konversation im selben Ordner (nicht etwa auf die Kopien in "Gesendet").
+    return m_conversationView ? MailStore::threadMessages(messageId, true) : QList<qint64>{messageId};
+}
+
+void AppController::afterRemoval(const QList<qint64> &messageIds)
+{
+    if (m_conversationView) {
+        m_messageModel->refresh();
+    } else {
+        for (qint64 id : messageIds)
+            m_messageModel->removeMessage(id);
     }
-    MailStore::moveLocally(messageId, target);
-    if (loc.uid > 0) {
-        MailStore::enqueueOp(loc.accountId, QStringLiteral("move"), loc.folderPath, loc.uid, MailStore::folder(target).path);
-        m_mail->flushPendingOps(loc.accountId);
-    }
-    m_messageModel->removeMessage(messageId);
-    if (m_current.value(QStringLiteral("id")).toLongLong() == messageId) {
+    if (messageIds.contains(m_current.value(QStringLiteral("id")).toLongLong())) {
         m_current.clear();
         Q_EMIT currentMessageChanged();
     }
     refreshCounts();
 }
 
+void AppController::moveToRole(qint64 messageId, const QString &role)
+{
+    const QList<qint64> ids = affectedMessages(messageId);
+    QList<qint64> moved;
+    for (qint64 id : ids) {
+        const MessageLocation loc = MailStore::location(id);
+        if (loc.id == 0)
+            continue;
+        const qint64 target = MailStore::ensureFolderForRole(loc.accountId, role);
+        if (target == 0) {
+            Q_EMIT notify(i18n("This account has no folder for this action."));
+            return;
+        }
+        if (target == loc.folderId)
+            continue;
+        MailStore::moveLocally(id, target);
+        if (loc.uid > 0) {
+            MailStore::enqueueOp(loc.accountId, QStringLiteral("move"), loc.folderPath, loc.uid, MailStore::folder(target).path);
+            m_mail->flushPendingOps(loc.accountId);
+        }
+        moved << id;
+    }
+    if (!moved.isEmpty())
+        afterRemoval(moved);
+}
+
 void AppController::deleteMessage(qint64 messageId)
 {
-    const MessageLocation loc = MailStore::location(messageId);
-    if (loc.id == 0)
+    const MessageLocation first = MailStore::location(messageId);
+    if (first.id == 0)
         return;
-    if (loc.folderRole != QLatin1String(FolderRole::Trash)) {
+    if (first.folderRole != QLatin1String(FolderRole::Trash)) {
         moveToRole(messageId, QString::fromLatin1(FolderRole::Trash));
         return;
     }
     // Im Papierkorb: endgültig löschen.
-    if (loc.uid > 0) {
-        MailStore::enqueueOp(loc.accountId, QStringLiteral("expunge"), loc.folderPath, loc.uid);
-        m_mail->flushPendingOps(loc.accountId);
+    const QList<qint64> ids = affectedMessages(messageId);
+    for (qint64 id : ids) {
+        const MessageLocation loc = MailStore::location(id);
+        if (loc.uid > 0) {
+            MailStore::enqueueOp(loc.accountId, QStringLiteral("expunge"), loc.folderPath, loc.uid);
+            m_mail->flushPendingOps(loc.accountId);
+        }
+        BlobStore::remove(loc.blobPath);
     }
-    BlobStore::remove(loc.blobPath);
-    MailStore::removeMessages({messageId});
-    m_messageModel->removeMessage(messageId);
-    if (m_current.value(QStringLiteral("id")).toLongLong() == messageId) {
-        m_current.clear();
-        Q_EMIT currentMessageChanged();
-    }
-    refreshCounts();
+    MailStore::removeMessages(ids);
+    afterRemoval(ids);
 }
 
 void AppController::archiveMessage(qint64 messageId)
@@ -730,6 +800,15 @@ bool AppController::cancelQueued(qint64 outboxId)
 bool AppController::setSignature(qint64 accountId, const QString &signature)
 {
     return m_accountManager->setSignature(accountId, signature);
+}
+
+void AppController::setConversationView(bool enabled)
+{
+    if (enabled == m_conversationView)
+        return;
+    m_conversationView = enabled;
+    Q_EMIT conversationViewChanged();
+    applyFilter();
 }
 
 void AppController::setUndoSendSeconds(int seconds)

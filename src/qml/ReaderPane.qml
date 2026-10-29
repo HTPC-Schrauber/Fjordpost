@@ -26,6 +26,11 @@ Rectangle {
     color: Theme.reading
 
     // Klartext-Mails im Theme darstellen
+    // Nur für --dev-action thread-history
+    function showWholeConversation() {
+        conversation.showAll = true;
+    }
+
     function pushReaderColors() {
         App.setReaderColors(String(Theme.reading), String(Theme.textPrimary), String(Theme.accent), String(Theme.textMuted));
     }
@@ -241,6 +246,216 @@ Rectangle {
                 }
             }
 
+            // Konversation: alle Nachrichten kompakt, ein Klick zeigt die jeweilige an.
+            // Lange Verläufe zeigen nur Anfang, Ende und die aktuelle Nachricht.
+            ColumnLayout {
+                id: conversation
+                readonly property var entries: pane.msg.thread ?? []
+                readonly property int maxRows: 6
+                property bool showAll: false
+                // Neue Konversation: wieder zusammengefasst beginnen
+                readonly property var threadKey: entries.length > 0 ? entries[0].id : 0
+                onThreadKeyChanged: showAll = false
+
+                readonly property var items: {
+                    const e = entries;
+                    if (e.length <= 4)
+                        return e.map(entry => ({ entry: entry, hidden: 0 }));
+                    if (showAll) {
+                        // Einklappen an derselben Stelle, an der vorher "N weitere" stand
+                        const all = e.map(entry => ({ entry: entry, hidden: 0 }));
+                        all.splice(1, 0, { entry: null, hidden: 0 });
+                        return all;
+                    }
+                    const current = e.findIndex(entry => entry.current);
+                    const keep = [0, e.length - 2, e.length - 1, current];
+                    const result = [];
+                    let hidden = 0;
+                    for (let i = 0; i < e.length; ++i) {
+                        if (!keep.includes(i)) {
+                            ++hidden;
+                            continue;
+                        }
+                        if (hidden > 0)
+                            result.push({ entry: null, hidden: hidden });
+                        hidden = 0;
+                        result.push({ entry: e[i], hidden: 0 });
+                    }
+                    return result;
+                }
+
+                Layout.fillWidth: true
+                visible: entries.length > 1
+                spacing: 6
+
+                QQC2.AbstractButton {
+                    id: conversationHeader
+                    hoverEnabled: true
+                    onClicked: Prefs.view.threadPanelOpen = !Prefs.view.threadPanelOpen
+                    contentItem: Row {
+                        spacing: 6
+                        SectionLabel {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: i18np("Conversation · %1 message", "Conversation · %1 messages", conversation.entries.length)
+                            color: conversationHeader.hovered ? Theme.textPrimary : Theme.textMuted
+                        }
+                        Kirigami.Icon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 10
+                            height: 10
+                            source: Prefs.view.threadPanelOpen ? "arrow-up" : "arrow-down"
+                            isMask: true
+                            color: conversationHeader.hovered ? Theme.textPrimary : Theme.textMuted
+                        }
+                    }
+                    background: Item {}
+                }
+
+                ListView {
+                    id: threadList
+                    readonly property real rowHeight: 34
+                    visible: Prefs.view.threadPanelOpen
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(count, conversation.maxRows) * rowHeight
+                    clip: true
+                    interactive: count > conversation.maxRows
+                    boundsBehavior: Flickable.StopAtBounds
+                    model: conversation.items
+                    QQC2.ScrollBar.vertical: QQC2.ScrollBar {
+                        id: threadScrollBar
+                        policy: threadList.count > conversation.maxRows ? QQC2.ScrollBar.AsNeeded : QQC2.ScrollBar.AlwaysOff
+                    }
+                    // Beim Auf-/Zuklappen oben bleiben, damit der Knopf sichtbar bleibt;
+                    // nur bei einer anderen Nachricht zur aktuellen scrollen.
+                    property var positionedFor: undefined
+                    onModelChanged: {
+                        const id = pane.msg.id;
+                        if (id === positionedFor) {
+                            positionViewAtBeginning();
+                            return;
+                        }
+                        positionedFor = id;
+                        const current = conversation.items.findIndex(item => item.entry && item.entry.current);
+                        if (current >= 0)
+                            positionViewAtIndex(current, ListView.Contain);
+                    }
+
+                    delegate: QQC2.ItemDelegate {
+                        id: entry
+                        required property var modelData
+                        readonly property var data_: modelData.entry
+                        readonly property bool isMore: data_ === null
+                        readonly property bool isCurrent: !isMore && data_.current
+                        // Platz für die Scrollleiste lassen, sonst verdeckt sie das Datum
+                        width: ListView.view.width - (threadScrollBar.visible ? threadScrollBar.width + 4 : 0)
+                        height: threadList.rowHeight
+                        hoverEnabled: true
+                        leftPadding: 10
+                        rightPadding: 10
+                        topPadding: 0
+                        bottomPadding: 0
+                        onClicked: {
+                            if (isMore)
+                                conversation.showAll = !conversation.showAll;
+                            else if (!isCurrent)
+                                App.openMessage(data_.id);
+                        }
+                        background: Rectangle {
+                            radius: Theme.radius
+                            color: entry.isCurrent ? Qt.alpha(Theme.accent, Theme.dark ? 0.11 : 0.08) : (entry.hovered ? Qt.alpha(Theme.card, 0.6) : "transparent")
+                            Rectangle {
+                                visible: entry.isCurrent
+                                width: 3
+                                height: parent.height - 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                radius: 1.5
+                                color: Theme.accent
+                            }
+                        }
+                        contentItem: Item {
+                            // "N weitere Nachrichten"
+                            RowLayout {
+                                anchors.fill: parent
+                                visible: entry.isMore
+                                spacing: 8
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 1
+                                    color: Theme.border
+                                }
+                                Rectangle {
+                                    implicitWidth: moreLabel.implicitWidth + 20
+                                    implicitHeight: moreLabel.implicitHeight + 6
+                                    radius: height / 2
+                                    color: entry.hovered ? Qt.alpha(Theme.accent, 0.18) : Theme.card
+                                    border.width: 1
+                                    border.color: Theme.border
+                                    QQC2.Label {
+                                        id: moreLabel
+                                        anchors.centerIn: parent
+                                        text: conversation.showAll ? i18n("Show fewer messages") : i18np("%1 more message", "%1 more messages", entry.modelData.hidden)
+                                        font.pointSize: Theme.fontXxs
+                                        color: entry.hovered ? Theme.accent : Theme.textSecondary
+                                    }
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 1
+                                    color: Theme.border
+                                }
+                            }
+                            RowLayout {
+                                anchors.fill: parent
+                                visible: !entry.isMore
+                                spacing: 10
+                                InitialsAvatar {
+                                    name: entry.isMore ? "" : entry.data_.fromName
+                                    size: 22
+                                }
+                                QQC2.Label {
+                                    Layout.preferredWidth: Math.min(Math.ceil(implicitWidth) + 1, entry.width * 0.3)
+                                    text: entry.isMore ? "" : entry.data_.fromName
+                                    elide: Text.ElideRight
+                                    font.pointSize: Theme.fontXs
+                                    font.weight: !entry.isMore && (entry.data_.unread || entry.isCurrent) ? Font.DemiBold : Font.Medium
+                                    color: !entry.isMore && (entry.isCurrent || entry.data_.unread) ? Theme.textPrimary : Theme.textSecondary
+                                }
+                                Kirigami.Icon {
+                                    visible: !entry.isMore && entry.data_.sent
+                                    Layout.preferredWidth: 12
+                                    Layout.preferredHeight: 12
+                                    source: "mail-sent"
+                                    isMask: true
+                                    color: Theme.textMuted
+                                }
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    text: entry.isMore ? "" : entry.data_.snippet
+                                    textFormat: Text.PlainText
+                                    elide: Text.ElideRight
+                                    maximumLineCount: 1
+                                    font.pointSize: Theme.fontXxs
+                                    color: Theme.textMuted
+                                }
+                                Rectangle {
+                                    visible: !entry.isMore && entry.data_.unread
+                                    Layout.preferredWidth: 6
+                                    Layout.preferredHeight: 6
+                                    radius: 3
+                                    color: Theme.accent
+                                }
+                                QQC2.Label {
+                                    text: entry.isMore ? "" : entry.data_.dateText
+                                    font.family: "monospace"
+                                    font.pointSize: Theme.fontXxs
+                                    color: Theme.textMuted
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Absenderkarte
             Rectangle {
                 Layout.fillWidth: true
@@ -273,7 +488,8 @@ Rectangle {
                                 font.weight: Font.DemiBold
                                 color: Theme.textPrimary
                                 elide: Text.ElideRight
-                                Layout.maximumWidth: implicitWidth
+                                // aufrunden, sonst wird der Name wegen Pixelbruchteilen gekürzt
+                                Layout.maximumWidth: Math.ceil(implicitWidth) + 1
                                 Layout.fillWidth: true
                             }
                             QQC2.Label {

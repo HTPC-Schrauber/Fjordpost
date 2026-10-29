@@ -8,6 +8,7 @@
 #include "fjordpost-version.h"
 #include "storage/database.h"
 #include "storage/demodata.h"
+#include "storage/mailstore.h"
 
 #include <KAboutData>
 #include <KCrash>
@@ -72,7 +73,7 @@ int main(int argc, char *argv[])
     parser.addOption(demoOption);
     parser.addOption(dataDirOption);
     parser.addOption(offlineOption);
-    QCommandLineOption devActionOption(QStringLiteral("dev-action"), i18n("Trigger a UI action before the screenshot (open-first, compose, compose-window, reply, setup, settings, light, undo-send)."), i18n("action"));
+    QCommandLineOption devActionOption(QStringLiteral("dev-action"), i18n("Trigger a UI action before the screenshot (open-first, compose, compose-window, reply, setup, settings, light, undo-send, open-thread, expand-thread, thread-history)."), i18n("action"));
     parser.addOption(screenshotOption);
     parser.addOption(devActionOption);
     about.setupCommandLine(&parser);
@@ -87,6 +88,7 @@ int main(int argc, char *argv[])
                                                          : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     if (!Database::initialize(QDir(dataDir).filePath(QStringLiteral("fjordpost.db"))))
         return 1;
+    MailStore::rebuildThreads();
 
     AccountManager accounts;
     accounts.load();

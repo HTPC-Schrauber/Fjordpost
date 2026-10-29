@@ -98,6 +98,10 @@ Kirigami.AbstractApplicationWindow {
             compose(0, "new");
         } else if (name === "compose-window") {
             openComposer(App.composeData(0, "new"), true);
+        } else if (name === "open-thread" || name === "expand-thread" || name === "thread-history") {
+            messageList.openFirstConversation(name === "expand-thread");
+            if (name === "thread-history")
+                readerPane.showWholeConversation();
         } else if (name === "undo-send") {
             messageList.openFirst();
             App.sendQuickReply("Test");
@@ -156,6 +160,11 @@ Kirigami.AbstractApplicationWindow {
         target: App
         property: "undoSendSeconds"
         value: Prefs.compose.undoSendSeconds
+    }
+    Binding {
+        target: App
+        property: "conversationView"
+        value: Prefs.view.conversations
     }
 
     Component.onCompleted: {
@@ -216,6 +225,7 @@ Kirigami.AbstractApplicationWindow {
                     QQC2.SplitView.minimumWidth: 380
 
                     ReaderPane {
+                        id: readerPane
                         anchors.fill: parent
                         visible: !inlineComposer.active
                         position: messageList.list.currentIndex

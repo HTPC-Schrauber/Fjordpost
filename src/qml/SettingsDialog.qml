@@ -70,6 +70,18 @@ ThemedDialog {
 
         Kirigami.Separator {
             Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Message List")
+        }
+
+        QQC2.CheckBox {
+            Kirigami.FormData.label: i18n("Conversations:")
+            text: i18n("Group messages into conversations")
+            checked: Prefs.view.conversations
+            onToggled: Prefs.view.conversations = checked
+        }
+
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
             Kirigami.FormData.label: i18n("Composing")
         }
 

@@ -22,6 +22,8 @@ QQC2.ItemDelegate {
     required property bool hasAttachments
     required property color accountColor
     required property string folderName
+    required property int threadCount
+    required property bool expanded
 
     readonly property bool active: ListView.isCurrentItem
     readonly property bool unified: App.selectedAccountId === 0
@@ -67,11 +69,51 @@ QQC2.ItemDelegate {
             }
             QQC2.Label {
                 Layout.fillWidth: true
+                // aufrunden, sonst kürzt das Layout den Namen wegen Bruchteilen eines Pixels
+                Layout.maximumWidth: Math.ceil(implicitWidth) + 1
                 text: card.fromName
                 elide: Text.ElideRight
                 font.pointSize: Theme.fontXs
                 font.weight: card.unread ? Font.DemiBold : Font.Medium
                 color: card.unread ? Theme.textPrimary : Theme.textSecondary
+            }
+            // Anzahl der Nachrichten; klappt die Konversation in der Liste auf
+            QQC2.AbstractButton {
+                id: threadButton
+                visible: card.threadCount > 1
+                hoverEnabled: true
+                implicitWidth: threadRow.implicitWidth + 10
+                implicitHeight: threadRow.implicitHeight + 4
+                onClicked: App.messages.toggleThread(card.messageId)
+                QQC2.ToolTip.text: card.expanded ? i18n("Collapse conversation") : i18n("Show all messages of this conversation")
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                background: Rectangle {
+                    radius: 4
+                    color: card.expanded || threadButton.hovered ? Qt.alpha(Theme.accent, 0.18) : Theme.card
+                }
+                contentItem: Row {
+                    id: threadRow
+                    spacing: 3
+                    QQC2.Label {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: card.threadCount
+                        font.family: "monospace"
+                        font.pointSize: Theme.fontXxs
+                        color: card.expanded || threadButton.hovered ? Theme.accent : Theme.textSecondary
+                    }
+                    Kirigami.Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 10
+                        height: 10
+                        source: card.expanded ? "arrow-up" : "arrow-down"
+                        isMask: true
+                        color: card.expanded || threadButton.hovered ? Theme.accent : Theme.textMuted
+                    }
+                }
+            }
+            Item {
+                Layout.fillWidth: true
             }
             QQC2.Label {
                 visible: !card.hovered

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
+import Qt.labs.qmlmodels
 import org.kde.kirigami as Kirigami
 import de.fjordblau.fjordpost.core
 import "components"
@@ -13,6 +14,21 @@ Rectangle {
 
     function openFirst() {
         messageList.currentIndex = 0;
+    }
+
+    // Nur für --dev-action open-thread/expand-thread: größte Konversation öffnen
+    function openFirstConversation(expand) {
+        let best = -1;
+        for (let i = 0; i < messageList.count; ++i) {
+            const item = messageList.itemAtIndex(i);
+            if (item && item.threadCount > 1 && (best < 0 || item.threadCount > messageList.itemAtIndex(best).threadCount))
+                best = i;
+        }
+        if (best < 0)
+            return;
+        messageList.currentIndex = best;
+        if (expand)
+            App.messages.toggleThread(messageList.currentItem.messageId);
     }
 
     function focusSearch() {
@@ -149,8 +165,20 @@ Rectangle {
                 background: Item {}
             }
 
-            delegate: MessageDelegate {
-                width: ListView.view.width
+            delegate: DelegateChooser {
+                role: "isChild"
+                DelegateChoice {
+                    roleValue: false
+                    MessageDelegate {
+                        width: ListView.view.width
+                    }
+                }
+                DelegateChoice {
+                    roleValue: true
+                    ThreadChildDelegate {
+                        width: ListView.view.width
+                    }
+                }
             }
 
             section.property: "dateGroup"

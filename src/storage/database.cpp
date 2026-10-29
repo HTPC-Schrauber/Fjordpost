@@ -148,6 +148,13 @@ const char *const migrations[] = {
     R"SQL(
     ALTER TABLE accounts ADD COLUMN signature TEXT NOT NULL DEFAULT '';
     )SQL",
+
+    // v4: Konversationen. Jede Nachricht gehört zu einem Thread (sonst ihr eigener);
+    // Index für das nachträgliche Zusammenführen über In-Reply-To.
+    R"SQL(
+    UPDATE messages SET thread_id = id WHERE thread_id = 0;
+    CREATE INDEX idx_messages_inreplyto ON messages(account_id, in_reply_to);
+    )SQL",
 };
 
 constexpr int migrationCount = int(sizeof(migrations) / sizeof(migrations[0]));

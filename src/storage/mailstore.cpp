@@ -36,25 +36,62 @@ QString utf8(const QByteArray &b)
     return nonNull(QString::fromUtf8(b));
 }
 
-// Thread-Zuordnung: gleiche Konversation, wenn ein referenzierter
-// Vorgänger im selben Konto bereits bekannt ist.
-qint64 findThread(qint64 accountId, const ParsedMessage &m)
+// Thread-Zuordnung: gleiche Konversation, wenn dieselbe Nachricht (Kopie in
+// einem anderen Ordner) oder ein referenzierter Vorgänger im selben Konto
+// bereits bekannt ist.
+qint64 findThread(qint64 accountId, qint64 ownId, const ParsedMessage &m)
 {
-    QList<QByteArray> candidates = m.references;
+    QList<QByteArray> candidates;
+    if (!m.messageId.isEmpty())
+        candidates << m.messageId;
     if (!m.inReplyTo.isEmpty())
-        candidates.prepend(m.inReplyTo);
+        candidates << m.inReplyTo;
+    // Neueste Referenz zuerst: der direkte Vorgänger ist am wahrscheinlichsten bekannt.
+    for (auto it = m.references.crbegin(); it != m.references.crend(); ++it)
+        candidates << *it;
     if (candidates.isEmpty())
         return 0;
 
     QSqlQuery q(Database::connection());
-    q.prepare(QStringLiteral("SELECT thread_id FROM messages WHERE account_id = ? AND message_id = ? AND thread_id > 0 LIMIT 1"));
+    q.prepare(QStringLiteral("SELECT thread_id FROM messages WHERE account_id = ? AND message_id = ? AND id != ? AND thread_id > 0 LIMIT 1"));
     for (const QByteArray &id : std::as_const(candidates)) {
         q.addBindValue(accountId);
         q.addBindValue(QString::fromUtf8(id));
+        q.addBindValue(ownId);
         if (exec(q) && q.next())
             return q.value(0).toLongLong();
     }
+    // Bezugsnachricht fehlt lokal: eine andere Antwort auf dieselbe Nachricht genügt.
+    QSqlQuery s(Database::connection());
+    s.prepare(QStringLiteral("SELECT thread_id FROM messages WHERE account_id = ? AND in_reply_to = ? AND id != ? AND thread_id > 0 LIMIT 1"));
+    for (const QByteArray &id : std::as_const(candidates)) {
+        if (id == m.messageId)
+            continue;
+        s.addBindValue(accountId);
+        s.addBindValue(QString::fromUtf8(id));
+        s.addBindValue(ownId);
+        if (exec(s) && s.next())
+            return s.value(0).toLongLong();
+    }
     return 0;
+}
+
+// Antworten, die vor ihrer Bezugsnachricht angekommen sind, haben einen eigenen
+// Thread bekommen; diese Threads jetzt in den der Bezugsnachricht übernehmen.
+void adoptReplies(qint64 accountId, const QByteArray &messageId, qint64 thread)
+{
+    if (messageId.isEmpty())
+        return;
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral(
+        "UPDATE messages SET thread_id = ? WHERE account_id = ? AND thread_id IN "
+        "(SELECT thread_id FROM messages WHERE account_id = ? AND in_reply_to = ? AND thread_id != ?)"));
+    q.addBindValue(thread);
+    q.addBindValue(accountId);
+    q.addBindValue(accountId);
+    q.addBindValue(QString::fromUtf8(messageId));
+    q.addBindValue(thread);
+    exec(q);
 }
 
 } // namespace
@@ -308,12 +345,15 @@ qint64 insertMessage(qint64 accountId, qint64 folderId, qint64 uid, int flags, q
         return 0;
     const qint64 id = q.lastInsertId().toLongLong();
 
-    qint64 thread = findThread(accountId, h);
+    qint64 thread = findThread(accountId, id, h);
+    if (thread <= 0)
+        thread = id;
     QSqlQuery t(Database::connection());
     t.prepare(QStringLiteral("UPDATE messages SET thread_id = ? WHERE id = ?"));
-    t.addBindValue(thread > 0 ? thread : id);
+    t.addBindValue(thread);
     t.addBindValue(id);
     exec(t);
+    adoptReplies(accountId, h.messageId, thread);
     return id;
 }
 
@@ -393,6 +433,123 @@ void moveLocally(qint64 messageId, qint64 targetFolderId)
     q.addBindValue(targetFolderId);
     q.addBindValue(messageId);
     exec(q);
+}
+
+int rebuildThreads()
+{
+    // Einmalig je Version des Zuordnungsverfahrens
+    constexpr auto versionKey = "thread_version";
+    constexpr auto currentVersion = "1";
+    {
+        QSqlQuery v(Database::connection());
+        v.prepare(QStringLiteral("SELECT value FROM sync_state WHERE key = ?"));
+        v.addBindValue(QString::fromLatin1(versionKey));
+        if (exec(v) && v.next() && v.value(0).toString() == QLatin1String(currentVersion))
+            return 0;
+    }
+
+    QSqlDatabase db = Database::connection();
+    QSqlQuery q(db);
+    if (!q.exec(QStringLiteral("SELECT id, account_id, message_id, in_reply_to, refs, thread_id FROM messages ORDER BY id")))
+        return 0;
+
+    // Union-Find über Nachrichten und Message-IDs je Konto: Nachrichten, die dieselbe
+    // ID tragen oder sich (auch über eine fehlende Nachricht) referenzieren, gehören zusammen.
+    QHash<QString, QString> parent;
+    auto find = [&](const QString &key) {
+        QString root = key;
+        while (parent.value(root, root) != root)
+            root = parent.value(root);
+        // Pfad verkürzen
+        QString node = key;
+        while (node != root) {
+            const QString next = parent.value(node);
+            parent[node] = root;
+            node = next;
+        }
+        return root;
+    };
+    auto unite = [&](const QString &a, const QString &b) {
+        const QString ra = find(a);
+        const QString rb = find(b);
+        if (ra != rb)
+            parent[rb] = ra;
+    };
+
+    struct Entry {
+        qint64 id;
+        qint64 thread;
+        QString key;
+    };
+    QList<Entry> entries;
+    while (q.next()) {
+        const qint64 id = q.value(0).toLongLong();
+        const QString account = q.value(1).toString();
+        const QString key = QStringLiteral("m:") + QString::number(id);
+        parent.insert(key, key);
+        QStringList ids = q.value(4).toString().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        ids << q.value(2).toString() << q.value(3).toString();
+        for (const QString &mid : std::as_const(ids)) {
+            if (!mid.isEmpty())
+                unite(key, account + QLatin1Char('|') + mid);
+        }
+        entries << Entry{id, q.value(5).toLongLong(), key};
+    }
+
+    // Thread-ID = kleinste Nachrichten-ID der Gruppe (stabil gegenüber dem alten Stand)
+    QHash<QString, qint64> threadOfRoot;
+    for (const Entry &e : std::as_const(entries)) {
+        const QString root = find(e.key);
+        if (!threadOfRoot.contains(root))
+            threadOfRoot.insert(root, e.id); // entries sind nach id sortiert
+    }
+
+    int changed = 0;
+    db.transaction();
+    QSqlQuery u(db);
+    u.prepare(QStringLiteral("UPDATE messages SET thread_id = ? WHERE id = ?"));
+    for (const Entry &e : std::as_const(entries)) {
+        const qint64 thread = threadOfRoot.value(find(e.key));
+        if (thread == e.thread)
+            continue;
+        u.addBindValue(thread);
+        u.addBindValue(e.id);
+        if (exec(u))
+            ++changed;
+    }
+    QSqlQuery v(db);
+    v.prepare(QStringLiteral("INSERT INTO sync_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"));
+    v.addBindValue(QString::fromLatin1(versionKey));
+    v.addBindValue(QString::fromLatin1(currentVersion));
+    exec(v);
+    db.commit();
+    if (changed > 0)
+        qCInfo(lcStore) << "Konversationen neu zugeordnet:" << changed << "Nachrichten";
+    return changed;
+}
+
+QList<qint64> threadMessages(qint64 messageId, bool sameFolder)
+{
+    // Papierkorb und Spam gehören nicht zur Konversation, außer man schaut gerade dort hinein.
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral(
+        "SELECT t.id FROM messages m JOIN folders mf ON mf.id = m.folder_id "
+        "JOIN messages t ON t.account_id = m.account_id AND t.thread_id = m.thread_id "
+        "JOIN folders tf ON tf.id = t.folder_id "
+        "WHERE m.id = ? AND (t.flags & %1) = 0 "
+        "AND (? = 0 OR t.folder_id = m.folder_id) "
+        "AND (tf.role NOT IN ('trash', 'junk') OR tf.role = mf.role) "
+        "ORDER BY t.date, t.id").arg(MessageFlag::Deleted));
+    q.addBindValue(messageId);
+    q.addBindValue(sameFolder ? 1 : 0);
+    QList<qint64> ids;
+    if (exec(q)) {
+        while (q.next())
+            ids << q.value(0).toLongLong();
+    }
+    if (ids.isEmpty())
+        ids << messageId;
+    return ids;
 }
 
 void enqueueOp(qint64 accountId, const QString &op, const QString &folderPath, qint64 uid, const QString &argument)
