@@ -2,10 +2,12 @@
 #include "models/messagelistmodel.h"
 #include "storage/database.h"
 #include "storage/demodata.h"
+#include "storage/labelstore.h"
 #include "storage/mailstore.h"
 #include "storage/messageflags.h"
 #include "mail/mime/messageparser.h"
 
+#include <KLocalizedString>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTest>
@@ -19,6 +21,7 @@ class MessageListModelTest : public QObject
 private Q_SLOTS:
     void initTestCase()
     {
+        KLocalizedString::setApplicationDomain("fjordpost");
         QVERIFY(m_dir.isValid());
         QVERIFY(Database::initialize(m_dir.filePath(QStringLiteral("test.db"))));
         m_accounts.load();
@@ -88,6 +91,50 @@ private Q_SLOTS:
         f.threaded = false;
         model.setFilter(f);
         QCOMPARE(model.rowCount(), 10);
+    }
+
+    void labelFilterShowsLabeledMessages()
+    {
+        // Demodaten: "Rechnungen" an der Oktober-Rechnung jedes Kontos
+        const auto labels = LabelStore::labels();
+        QVERIFY(!labels.isEmpty());
+        MessageListModel model;
+        MessageListModel::Filter f;
+        f.threaded = true;
+        f.labelId = labels.first().id;
+        model.setFilter(f);
+        QCOMPARE(model.rowCount(), 3);
+        for (int i = 0; i < model.rowCount(); ++i) {
+            const QModelIndex idx = model.index(i);
+            QCOMPARE(idx.data(MessageListModel::LabelsRole).toList().size(), 1);
+        }
+    }
+
+    void labelKeywords()
+    {
+        QCOMPARE(LabelStore::keywordFor(QStringLiteral("Rechnungen")), QStringLiteral("rechnungen"));
+        QCOMPARE(LabelStore::keywordFor(QStringLiteral("Büro & Co.")), QStringLiteral("buro_co."));
+        QCOMPARE(LabelStore::keywordFor(QStringLiteral("Straße")), QStringLiteral("strasse"));
+        QCOMPARE(LabelStore::keywordFor(QStringLiteral("UI / Produkt")), QStringLiteral("ui_produkt"));
+        QCOMPARE(LabelStore::keywordFor(QStringLiteral("📷")), QStringLiteral("label"));
+
+        // Name doppelt (auch in anderer Schreibweise) geht nicht; gleiches Schlüsselwort wird nummeriert
+        QCOMPARE(LabelStore::create(QStringLiteral("rechnungen"), {}), 0);
+        const qint64 a = LabelStore::create(QStringLiteral("UI/Produkt"), {});
+        const qint64 b = LabelStore::create(QStringLiteral("UI Produkt"), {});
+        QVERIFY(a > 0 && b > 0);
+        QCOMPARE(LabelStore::label(b).keyword, QStringLiteral("ui_produkt_2"));
+
+        // Serverschlüsselwörter: bekannte übernehmen, fremde und Systemflags ignorieren
+        const QSet<QString> keywords = LabelStore::keywordsFromFlags({"\\Seen", "$Forwarded", "ui_produkt", "NonJunk", "Fremd"});
+        QCOMPARE(keywords, (QSet<QString>{QStringLiteral("ui_produkt"), QStringLiteral("fremd")}));
+        const qint64 message = MailStore::threadMessages(1).first();
+        LabelStore::applyKeywords(message, keywords);
+        QVERIFY(LabelStore::labelsOf(message).contains(a));
+        LabelStore::applyKeywords(message, {});
+        QVERIFY(!LabelStore::labelsOf(message).contains(a));
+        LabelStore::remove(a);
+        LabelStore::remove(b);
     }
 
     void threadsFollowReferences()

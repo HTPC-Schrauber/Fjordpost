@@ -155,6 +155,25 @@ const char *const migrations[] = {
     UPDATE messages SET thread_id = id WHERE thread_id = 0;
     CREATE INDEX idx_messages_inreplyto ON messages(account_id, in_reply_to);
     )SQL",
+
+    // v5: Labels (kontenübergreifend), auf dem Server als IMAP-Schlüsselwort
+    R"SQL(
+    CREATE TABLE labels (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        color       TEXT NOT NULL DEFAULT '',
+        keyword     TEXT NOT NULL UNIQUE,
+        sort_order  INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE message_labels (
+        message_id  INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        label_id    INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+        PRIMARY KEY (message_id, label_id)
+    );
+    CREATE INDEX idx_message_labels_label ON message_labels(label_id);
+    -- Erlaubt der Server eigene Schlüsselwörter (PERMANENTFLAGS \*)? Bis zum ersten SELECT angenommen.
+    ALTER TABLE folders ADD COLUMN keywords INTEGER NOT NULL DEFAULT 1;
+    )SQL",
 };
 
 constexpr int migrationCount = int(sizeof(migrations) / sizeof(migrations[0]));

@@ -8,9 +8,11 @@
 #include "mail/mime/messageparser.h"
 #include "models/accountmodel.h"
 #include "models/foldermodel.h"
+#include "models/labelmodel.h"
 #include "models/messagelistmodel.h"
 #include "storage/blobstore.h"
 #include "storage/database.h"
+#include "storage/labelstore.h"
 #include "storage/mailstore.h"
 #include "storage/messageflags.h"
 
@@ -127,6 +129,7 @@ AppController::AppController(AccountManager *accounts, MailService *mail, Accoun
     , m_accountModel(new AccountModel(accounts, this))
     , m_folderModel(new FolderModel(this))
     , m_messageModel(new MessageListModel(this))
+    , m_labelModel(new LabelModel(this))
 {
     m_role = QString::fromLatin1(FolderRole::Inbox);
     m_title = i18n("All Inboxes");
@@ -177,6 +180,11 @@ AppController::AppController(AccountManager *accounts, MailService *mail, Accoun
 QObject *AppController::accountsObject() const
 {
     return m_accountModel;
+}
+
+QObject *AppController::labelsObject() const
+{
+    return m_labelModel;
 }
 
 QObject *AppController::foldersObject() const
@@ -255,6 +263,7 @@ QString AppController::selectionSubtitle() const
 void AppController::selectAccount(qint64 accountId)
 {
     m_accountId = accountId;
+    m_labelId = 0;
     m_folderModel->setAccountId(accountId);
 
     // Beim Kontowechsel immer im Posteingang landen
@@ -274,8 +283,24 @@ void AppController::selectAccount(qint64 accountId)
     applyFilter();
 }
 
+void AppController::selectLabel(qint64 labelId, const QString &name)
+{
+    // Labels gelten kontenübergreifend: Kontofilter bleibt, Ordner entfällt
+    m_labelId = labelId;
+    m_folderId = 0;
+    m_role.clear();
+    m_title = name;
+    if (!m_search.isEmpty()) {
+        m_search.clear();
+        Q_EMIT searchTextChanged();
+    }
+    Q_EMIT selectionChanged();
+    applyFilter();
+}
+
 void AppController::selectFolder(qint64 folderId, const QString &role, const QString &name)
 {
+    m_labelId = 0;
     m_folderId = folderId;
     m_role = role;
     m_title = name;
@@ -299,6 +324,7 @@ void AppController::applyFilter()
     f.search = m_search;
     f.quick = m_quickFilter;
     f.threaded = m_conversationView;
+    f.labelId = m_labelId;
     m_messageModel->setFilter(f);
 
     if (!m_current.isEmpty()) {
@@ -311,6 +337,7 @@ void AppController::refreshCounts()
 {
     m_accountModel->reload();
     m_folderModel->reload();
+    m_labelModel->reload();
 
     QSqlQuery q(Database::connection());
     q.prepare(QStringLiteral("SELECT COUNT(*) FROM messages m JOIN folders f ON f.id = m.folder_id "
@@ -374,6 +401,7 @@ void AppController::loadCurrent(qint64 messageId)
         {QStringLiteral("attachments"), QVariantList()},
         {QStringLiteral("folderName"), folderDisplayName(messageId)},
         {QStringLiteral("thread"), threadEntries(messageId)},
+        {QStringLiteral("labels"), labelsOfCurrent(messageId)},
     };
 
     if (bodyFetched && !blobPath.isEmpty()) {
@@ -429,6 +457,26 @@ QVariantList AppController::threadEntries(qint64 messageId) const
             {QStringLiteral("sent"), q.value(5).toString() == QLatin1String(FolderRole::Sent)},
             {QStringLiteral("current"), id == messageId},
         };
+    }
+    return result;
+}
+
+QVariantList AppController::labelsOfCurrent(qint64 messageId) const
+{
+    // In der Konversationsansicht alle Labels der Konversation
+    const QList<qint64> ids = m_conversationView ? MailStore::threadMessages(messageId) : QList<qint64>{messageId};
+    QList<qint64> labelIds;
+    for (qint64 id : ids) {
+        for (qint64 l : LabelStore::labelsOf(id)) {
+            if (!labelIds.contains(l))
+                labelIds << l;
+        }
+    }
+    QVariantList result;
+    const auto labels = LabelStore::labels();
+    for (const Label &l : labels) {
+        if (labelIds.contains(l.id))
+            result << QVariantMap{{QStringLiteral("id"), l.id}, {QStringLiteral("name"), l.name}, {QStringLiteral("color"), l.color}};
     }
     return result;
 }
@@ -499,6 +547,97 @@ void AppController::markAllRead()
         ids << (m_conversationView ? MailStore::threadMessages(id) : QList<qint64>{id});
     }
     applyRead(ids, true);
+}
+
+// ------------------------------------------------------------------ Labels
+
+QString AppController::createLabel(const QString &name, const QString &color, qint64 assignTo)
+{
+    if (name.trimmed().isEmpty())
+        return i18n("Please enter a name.");
+    const qint64 id = LabelStore::create(name, color);
+    if (id == 0)
+        return i18n("A label with this name already exists.");
+    if (assignTo > 0)
+        toggleLabel(assignTo, id); // aktualisiert auch die Anzeige
+    else
+        afterLabelChange();
+    return {};
+}
+
+QString AppController::updateLabel(qint64 labelId, const QString &name, const QString &color)
+{
+    if (name.trimmed().isEmpty())
+        return i18n("Please enter a name.");
+    if (!LabelStore::update(labelId, name, color))
+        return i18n("A label with this name already exists.");
+    if (m_labelId == labelId) {
+        m_title = name.trimmed();
+        Q_EMIT selectionChanged();
+    }
+    afterLabelChange();
+    return {};
+}
+
+void AppController::deleteLabel(qint64 labelId)
+{
+    const Label label = LabelStore::label(labelId);
+    if (label.id == 0)
+        return;
+    // Schlüsselwort auch auf dem Server entfernen
+    const QList<qint64> ids = LabelStore::messagesWith(labelId);
+    for (qint64 id : ids)
+        sendKeywordChange(id, label.keyword, false);
+    LabelStore::remove(labelId);
+    if (m_labelId == labelId)
+        selectAccount(m_accountId);
+    afterLabelChange();
+}
+
+void AppController::toggleLabel(qint64 messageId, qint64 labelId)
+{
+    const Label label = LabelStore::label(labelId);
+    if (label.id == 0)
+        return;
+    const QList<qint64> ids = m_conversationView ? MailStore::threadMessages(messageId) : QList<qint64>{messageId};
+    // Ist das Label schon irgendwo gesetzt, wird es entfernt (wie in der Anzeige)
+    bool present = false;
+    for (qint64 id : ids)
+        present = present || LabelStore::labelsOf(id).contains(labelId);
+    for (qint64 id : ids) {
+        if (LabelStore::setLabel(id, labelId, !present))
+            sendKeywordChange(id, label.keyword, !present);
+    }
+    afterLabelChange();
+}
+
+QVariantList AppController::labelIdsOf(qint64 messageId) const
+{
+    QVariantList result;
+    const QVariantList labels = labelsOfCurrent(messageId);
+    for (const QVariant &l : labels)
+        result << l.toMap().value(QStringLiteral("id"));
+    return result;
+}
+
+void AppController::sendKeywordChange(qint64 messageId, const QString &keyword, bool add)
+{
+    const MessageLocation loc = MailStore::location(messageId);
+    if (loc.id == 0 || loc.uid <= 0 || !MailStore::folder(loc.folderId).keywords)
+        return;
+    MailStore::enqueueOp(loc.accountId, QStringLiteral("flags"), loc.folderPath, loc.uid, (add ? QLatin1Char('+') : QLatin1Char('-')) + keyword);
+    m_mail->flushPendingOps(loc.accountId);
+}
+
+void AppController::afterLabelChange()
+{
+    m_labelModel->reload();
+    m_messageModel->refresh();
+    const qint64 current = m_current.value(QStringLiteral("id")).toLongLong();
+    if (current > 0) {
+        m_current[QStringLiteral("labels")] = labelsOfCurrent(current);
+        Q_EMIT currentMessageChanged();
+    }
 }
 
 // ---------------------------------------------------------------- Aktionen

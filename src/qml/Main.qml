@@ -102,6 +102,14 @@ Kirigami.AbstractApplicationWindow {
             messageList.openFirstConversation(name === "expand-thread");
             if (name === "thread-history")
                 readerPane.showWholeConversation();
+        } else if (name === "label-menu") {
+            messageList.openFirst();
+            readerPane.openLabelMenu();
+        } else if (name === "label-dialog") {
+            labelDialog.openNew(0);
+        } else if (name === "label-filter") {
+            const first = App.labels.index(0, 0);
+            App.selectLabel(App.labels.data(first, Qt.UserRole + 1), App.labels.data(first, Qt.UserRole + 2));
         } else if (name === "undo-send") {
             messageList.openFirst();
             App.sendQuickReply("Test");
@@ -122,6 +130,11 @@ Kirigami.AbstractApplicationWindow {
 
     SettingsDialog {
         id: settingsDialog
+        parent: root.overlay
+    }
+
+    LabelDialog {
+        id: labelDialog
         parent: root.overlay
     }
 
@@ -211,6 +224,8 @@ Kirigami.AbstractApplicationWindow {
                     QQC2.SplitView.preferredWidth: 240
                     QQC2.SplitView.minimumWidth: 180
                     onComposeRequested: root.compose(0, "new")
+                    onNewLabelRequested: labelDialog.openNew(0)
+                    onEditLabelRequested: (id, name, color) => labelDialog.openEdit(id, name, color)
                 }
 
                 MessageListPane {
@@ -235,6 +250,7 @@ Kirigami.AbstractApplicationWindow {
                         onNavigate: delta => messageList.step(delta)
                         onToggleDrawer: Theme.settings.contextDrawer = !Theme.settings.contextDrawer
                         onNotify: message => root.notify(message)
+                        onNewLabelRequested: id => labelDialog.openNew(id)
                     }
 
                     Loader {
@@ -316,6 +332,11 @@ Kirigami.AbstractApplicationWindow {
         sequence: "Ctrl+L"
         enabled: App.currentMessage.id !== undefined
         onActivated: root.compose(App.currentMessage.id, "forward")
+    }
+    Shortcut {
+        sequence: "L"
+        enabled: App.currentMessage.id !== undefined && !inlineComposer.active
+        onActivated: readerPane.openLabelMenu()
     }
     Shortcut {
         sequence: "Ctrl+1"

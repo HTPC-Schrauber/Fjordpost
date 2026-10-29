@@ -16,6 +16,7 @@ struct FolderState {
     qint64 uidValidity = 0;
     qint64 uidNext = 0;
     quint64 highestModSeq = 0;
+    bool keywords = true; // Server speichert eigene Schlüsselwörter (Labels)
 };
 
 struct LocalMessage {

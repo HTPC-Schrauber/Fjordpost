@@ -4,6 +4,7 @@
 #include "mail/mime/messageparser.h"
 #include "storage/blobstore.h"
 #include "storage/database.h"
+#include "storage/labelstore.h"
 #include "storage/messageflags.h"
 
 #include <KIMAP/AppendJob>
@@ -225,6 +226,9 @@ void ImapAccount::syncOneFolder(KIMAP::Session *session, const FolderState &fold
             state.uidNext = 0;
         }
         state.uidValidity = select->uidValidity();
+        // Ohne "\*" in PERMANENTFLAGS verwirft der Server eigene Schlüsselwörter; dann
+        // bleiben Labels lokal und werden nicht vom (leeren) Serverstand überschrieben.
+        state.keywords = select->permanentFlags().contains("\\*");
 
         const int exists = select->messageCount();
         const qint64 serverUidNext = select->nextUid();
@@ -310,6 +314,8 @@ void ImapAccount::fetchNewHeaders(KIMAP::Session *session, FolderState folder, i
             const ParsedMessage headers = MessageParser::parseHeaders(m.message->head());
             const int flags = MailStore::flagsFromImap(m.flags);
             const qint64 id = MailStore::insertMessage(m_account.id, folder.id, m.uid, flags, m.size, headers);
+            if (const QSet<QString> keywords = LabelStore::keywordsFromFlags(m.flags); id > 0 && !keywords.isEmpty())
+                LabelStore::applyKeywords(id, keywords);
             known->insert(m.uid, {id, flags});
             if (notify && id > 0 && !(flags & MessageFlag::Seen))
                 newIds->append(id);
@@ -343,11 +349,15 @@ void ImapAccount::syncFlags(KIMAP::Session *session, const FolderState &folder, 
     job->setScope(scope);
 
     auto server = std::make_shared<QHash<qint64, int>>();
-    connect(job, &KIMAP::FetchJob::messagesAvailable, this, [server](const QMap<qint64, KIMAP::Message> &messages) {
-        for (const KIMAP::Message &m : messages)
+    auto serverKeywords = std::make_shared<QHash<qint64, QSet<QString>>>();
+    connect(job, &KIMAP::FetchJob::messagesAvailable, this, [server, serverKeywords](const QMap<qint64, KIMAP::Message> &messages) {
+        for (const KIMAP::Message &m : messages) {
             server->insert(m.uid, MailStore::flagsFromImap(m.flags));
+            if (QSet<QString> keywords = LabelStore::keywordsFromFlags(m.flags); !keywords.isEmpty())
+                serverKeywords->insert(m.uid, std::move(keywords));
+        }
     });
-    connect(job, &KJob::result, this, [this, job, folder, minUid, server, done](KJob *) {
+    connect(job, &KJob::result, this, [this, job, folder, minUid, server, serverKeywords, done](KJob *) {
         if (job->error()) {
             qCWarning(lcImap) << "FETCH (Flags)" << folder.path << "fehlgeschlagen:" << job->errorString();
             done();
@@ -355,6 +365,14 @@ void ImapAccount::syncFlags(KIMAP::Session *session, const FolderState &folder, 
         }
         const QHash<qint64, LocalMessage> local = MailStore::localMessages(folder.id, minUid);
         const QSet<qint64> pending = MailStore::uidsWithPendingOps(m_account.id, folder.path);
+        const QHash<qint64, QSet<QString>> localKeywords = folder.keywords ? LabelStore::keywordsInFolder(folder.id) : QHash<qint64, QSet<QString>>();
+        // Nur bekannte Schlüsselwörter vergleichen, fremde würden sonst jedes Mal abweichen
+        QSet<QString> knownKeywords;
+        if (folder.keywords) {
+            const auto labels = LabelStore::labels();
+            for (const Label &l : labels)
+                knownKeywords.insert(l.keyword);
+        }
         QList<qint64> removed;
         {
             Transaction tx;
@@ -362,10 +380,18 @@ void ImapAccount::syncFlags(KIMAP::Session *session, const FolderState &folder, 
                 if (pending.contains(it.key()))
                     continue;
                 const auto serverIt = server->constFind(it.key());
-                if (serverIt == server->constEnd())
+                if (serverIt == server->constEnd()) {
                     removed << it.value().id;
-                else if (serverIt.value() != it.value().flags)
+                    continue;
+                }
+                if (serverIt.value() != it.value().flags)
                     MailStore::updateFlags(it.value().id, serverIt.value());
+                // Labels wie Flags: der Server gilt, sofern er Schlüsselwörter speichert
+                if (folder.keywords) {
+                    const QSet<QString> fromServer = serverKeywords->value(it.key()) & knownKeywords;
+                    if (fromServer != localKeywords.value(it.value().id))
+                        LabelStore::applyKeywords(it.value().id, fromServer);
+                }
             }
             MailStore::removeMessages(removed);
         }

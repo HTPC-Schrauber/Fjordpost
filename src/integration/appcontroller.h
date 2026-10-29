@@ -10,6 +10,7 @@ class AccountManager;
 class AccountModel;
 class AccountSetup;
 class FolderModel;
+class LabelModel;
 class MailService;
 class MessageListModel;
 struct OutgoingMessage;
@@ -22,6 +23,8 @@ class AppController : public QObject
     Q_PROPERTY(QObject *accounts READ accountsObject CONSTANT)
     Q_PROPERTY(QObject *folders READ foldersObject CONSTANT)
     Q_PROPERTY(QObject *messages READ messagesObject CONSTANT)
+    Q_PROPERTY(QObject *labels READ labelsObject CONSTANT)
+    Q_PROPERTY(qint64 selectedLabelId READ selectedLabelId NOTIFY selectionChanged)
     Q_PROPERTY(QObject *accountSetup READ accountSetupObject CONSTANT)
     Q_PROPERTY(bool hasAccounts READ hasAccounts NOTIFY accountsChanged)
     Q_PROPERTY(qint64 selectedAccountId READ selectedAccountId NOTIFY selectionChanged)
@@ -47,6 +50,8 @@ public:
     QObject *accountsObject() const;
     QObject *foldersObject() const;
     QObject *messagesObject() const;
+    QObject *labelsObject() const;
+    qint64 selectedLabelId() const { return m_labelId; }
     QObject *accountSetupObject() const;
 
     bool hasAccounts() const;
@@ -72,6 +77,7 @@ public:
     // 0 = Unified Inbox (alle Konten)
     Q_INVOKABLE void selectAccount(qint64 accountId);
     Q_INVOKABLE void selectFolder(qint64 folderId, const QString &role, const QString &name);
+    Q_INVOKABLE void selectLabel(qint64 labelId, const QString &name);
     Q_INVOKABLE void openMessage(qint64 messageId);
     Q_INVOKABLE void syncNow();
     Q_INVOKABLE void dismissError();
@@ -83,6 +89,15 @@ public:
     Q_INVOKABLE void archiveMessage(qint64 messageId);
     Q_INVOKABLE void allowRemoteContent();
     Q_INVOKABLE void markAllRead();
+
+    // Labels; Fehlermeldung oder leerer String
+    // assignTo > 0: das neue Label gleich dieser Nachricht (bzw. Konversation) geben
+    Q_INVOKABLE QString createLabel(const QString &name, const QString &color, qint64 assignTo = 0);
+    Q_INVOKABLE QString updateLabel(qint64 labelId, const QString &name, const QString &color);
+    Q_INVOKABLE void deleteLabel(qint64 labelId);
+    // In der Konversationsansicht für die ganze Konversation
+    Q_INVOKABLE void toggleLabel(qint64 messageId, qint64 labelId);
+    Q_INVOKABLE QVariantList labelIdsOf(qint64 messageId) const;
     // Kontext-Seitenleiste
     Q_INVOKABLE int messageCountFrom(const QString &email) const;
     Q_INVOKABLE void showMessagesFrom(const QString &email);
@@ -133,6 +148,9 @@ private:
     QList<qint64> affectedMessages(qint64 messageId) const;
     void afterRemoval(const QList<qint64> &messageIds);
     QVariantList threadEntries(qint64 messageId) const;
+    QVariantList labelsOfCurrent(qint64 messageId) const;
+    void sendKeywordChange(qint64 messageId, const QString &keyword, bool add);
+    void afterLabelChange();
     void refreshCounts();
     void loadCurrent(qint64 messageId);
     void setError(const QString &message);
@@ -145,9 +163,11 @@ private:
     AccountModel *m_accountModel;
     FolderModel *m_folderModel;
     MessageListModel *m_messageModel;
+    LabelModel *m_labelModel;
 
     qint64 m_accountId = 0;
     qint64 m_folderId = 0;
+    qint64 m_labelId = 0;
     QString m_role;
     QString m_title;
     QString m_search;

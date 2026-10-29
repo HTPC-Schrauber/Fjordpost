@@ -10,6 +10,8 @@ Rectangle {
     id: pane
 
     signal composeRequested()
+    signal newLabelRequested()
+    signal editLabelRequested(var labelId, string name, string color)
 
     color: Theme.sidebar
 
@@ -175,14 +177,84 @@ Rectangle {
                             leftPadding: 8
                             text: i18n("Labels & Filters")
                         }
+                        IconButton {
+                            implicitWidth: 22
+                            implicitHeight: 20
+                            iconName: "list-add"
+                            iconSize: 12
+                            tooltip: i18n("New label")
+                            onClicked: pane.newLabelRequested()
+                        }
                     }
                     QQC2.Label {
                         Layout.fillWidth: true
+                        visible: App.labels.count === 0
                         leftPadding: 8
-                        text: i18n("Labels will be available in a later version.")
+                        text: i18n("Labels sort messages across all accounts. Create one with + or via the tag button above a message.")
                         font.pointSize: Theme.fontXxs
                         color: Theme.textMuted
                         wrapMode: Text.Wrap
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                    Repeater {
+                        model: App.labels
+                        delegate: QQC2.AbstractButton {
+                            id: labelEntry
+
+                            required property var labelId
+                            required property string name
+                            required property string labelColor
+                            required property int messageCount
+
+                            readonly property bool current: App.searchText.length === 0 && App.selectedLabelId === labelId
+
+                            Layout.fillWidth: true
+                            implicitHeight: 32
+                            hoverEnabled: true
+                            onClicked: App.selectLabel(labelId, name)
+
+                            TapHandler {
+                                acceptedButtons: Qt.RightButton
+                                onTapped: labelContextMenu.openFor(labelEntry.labelId, labelEntry.name, labelEntry.labelColor)
+                            }
+
+                            background: Rectangle {
+                                radius: Theme.radius
+                                color: labelEntry.current ? Qt.alpha(Theme.accent, 0.15) : (labelEntry.hovered ? Theme.card : "transparent")
+                            }
+                            contentItem: RowLayout {
+                                spacing: 10
+                                Item {
+                                    Layout.preferredWidth: 5
+                                }
+                                Rectangle {
+                                    Layout.preferredWidth: 8
+                                    Layout.preferredHeight: 8
+                                    radius: 4
+                                    color: labelEntry.labelColor.length > 0 ? labelEntry.labelColor : Theme.textMuted
+                                }
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: 3
+                                    text: labelEntry.name
+                                    elide: Text.ElideRight
+                                    font.pointSize: Theme.fontXs
+                                    font.weight: labelEntry.current ? Font.Medium : Font.Normal
+                                    color: labelEntry.current ? Theme.accent : (labelEntry.hovered ? Theme.textPrimary : Theme.textSecondary)
+                                }
+                                QQC2.Label {
+                                    Layout.rightMargin: 8
+                                    visible: labelEntry.messageCount > 0
+                                    text: labelEntry.messageCount
+                                    font.family: "monospace"
+                                    font.pointSize: Theme.fontXxs
+                                    color: Theme.textMuted
+                                }
+                            }
+                        }
+                    }
                     }
                 }
             }
@@ -255,5 +327,43 @@ Rectangle {
                 }
             }
         }
+    }
+
+    QQC2.Menu {
+        id: labelContextMenu
+        property var labelId: 0
+        property string labelName
+        property string labelColor
+        function openFor(id, name, color) {
+            labelId = id;
+            labelName = name;
+            labelColor = color;
+            popup();
+        }
+        QQC2.MenuItem {
+            text: i18n("Edit…")
+            icon.name: "document-edit"
+            onTriggered: pane.editLabelRequested(labelContextMenu.labelId, labelContextMenu.labelName, labelContextMenu.labelColor)
+        }
+        QQC2.MenuItem {
+            text: i18n("Delete")
+            icon.name: "edit-delete"
+            onTriggered: deleteLabelDialog.open()
+        }
+    }
+
+    Kirigami.PromptDialog {
+        id: deleteLabelDialog
+        parent: QQC2.Overlay.overlay
+        Kirigami.Theme.inherit: false
+        Kirigami.Theme.colorSet: Kirigami.Theme.View
+        Kirigami.Theme.backgroundColor: Theme.elevated
+        Kirigami.Theme.textColor: Theme.textPrimary
+        Kirigami.Theme.highlightColor: Theme.accent
+        Kirigami.Theme.highlightedTextColor: Theme.accentText
+        title: i18n("Delete label \"%1\"?", labelContextMenu.labelName)
+        subtitle: i18n("The label is removed from all messages. The messages themselves are kept.")
+        standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
+        onAccepted: App.deleteLabel(labelContextMenu.labelId)
     }
 }

@@ -12,6 +12,7 @@
 #include "mail/smtp/smtpsender.h"
 #include "storage/blobstore.h"
 #include "storage/database.h"
+#include "storage/labelstore.h"
 #include "storage/mailstore.h"
 #include "storage/messageflags.h"
 
@@ -238,6 +239,48 @@ private Q_SLOTS:
         const qint64 checkId = checkMessage(FolderRole::Sent, subject);
         QVERIFY(checkId > 0);
         QVERIFY(MailStore::location(checkId).flags & MessageFlag::Seen);
+    }
+
+    // Label als IMAP-Schlüsselwort: setzen, beim zweiten Konto ankommen lassen, entfernen
+    void labelsTravelAsKeywords()
+    {
+        const QString subject = QStringLiteral("Label %1").arg(m_tag);
+        QVERIFY(send(subject, QStringLiteral("Mit Label")));
+        const qint64 labelId = LabelStore::create(QStringLiteral("Projekt %1").arg(m_tag), QStringLiteral("#6366f1"));
+        QVERIFY(labelId > 0);
+        const QString keyword = LabelStore::label(labelId).keyword;
+
+        ImapAccount imap(m_anna);
+        imap.setCredentials(m_anna, password);
+        QVERIFY(syncAndWait(imap));
+        const qint64 inbox = MailStore::folderIdForRole(m_anna.id, QString::fromLatin1(FolderRole::Inbox));
+        // Die Zustellung kann einen Moment dauern: bis dahin erneut abgleichen
+        const auto arrived = [&] {
+            return syncAndWait(imap) && messageWithSubject(inbox, subject) > 0;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(arrived(), 15000);
+        if (!MailStore::folder(inbox).keywords)
+            QSKIP("Server speichert keine eigenen Schlüsselwörter (PERMANENTFLAGS ohne \\*)");
+
+        const qint64 id = messageWithSubject(inbox, subject);
+        const MessageLocation loc = MailStore::location(id);
+        QVERIFY(LabelStore::setLabel(id, labelId, true));
+        MailStore::enqueueOp(m_anna.id, QStringLiteral("flags"), loc.folderPath, loc.uid, QLatin1Char('+') + keyword);
+        imap.flushPendingOps();
+        QTRY_VERIFY_WITH_TIMEOUT(MailStore::pendingOps(m_anna.id).isEmpty(), 15000);
+
+        // Das Kontrollkonto sieht das Label nach seinem eigenen Abgleich
+        const qint64 checkId = checkMessage(FolderRole::Inbox, subject);
+        QVERIFY(checkId > 0);
+        QVERIFY(LabelStore::labelsOf(checkId).contains(labelId));
+
+        // Entfernen kommt ebenfalls an
+        QVERIFY(LabelStore::setLabel(id, labelId, false));
+        MailStore::enqueueOp(m_anna.id, QStringLiteral("flags"), loc.folderPath, loc.uid, QLatin1Char('-') + keyword);
+        imap.flushPendingOps();
+        QTRY_VERIFY_WITH_TIMEOUT(MailStore::pendingOps(m_anna.id).isEmpty(), 15000);
+        imap.shutdown();
+        QVERIFY(!LabelStore::labelsOf(checkMessage(FolderRole::Inbox, subject)).contains(labelId));
     }
 
     // "Senden rückgängig": Rücknahme vor Ablauf und sofortiger Versand beim Beenden

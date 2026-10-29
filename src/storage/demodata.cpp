@@ -2,6 +2,7 @@
 
 #include "core/accountmanager.h"
 #include "storage/database.h"
+#include "storage/labelstore.h"
 #include "storage/messageflags.h"
 
 #include <QDateTime>
@@ -179,6 +180,21 @@ void seedDemoData(AccountManager &accounts)
     seedAccount(accounts, QStringLiteral("Privat"), QStringLiteral("max@example.de"), QColor(QStringLiteral("#3daee9")), AccountType::Imap, 0);
     seedAccount(accounts, QStringLiteral("Arbeit"), QStringLiteral("max.mustermann@firma.example"), QColor(QStringLiteral("#e93d58")), AccountType::Imap, 1);
     seedAccount(accounts, QStringLiteral("Alt-Konto"), QStringLiteral("max@altmail.example"), QColor(QStringLiteral("#27ae60")), AccountType::Pop3, 2);
+
+    // Labels über Betreffzeilen zuweisen
+    const auto assign = [](qint64 label, const QString &subjectPattern) {
+        QSqlQuery q(Database::connection());
+        q.prepare(QStringLiteral("INSERT OR IGNORE INTO message_labels (message_id, label_id) SELECT id, ? FROM messages WHERE subject LIKE ?"));
+        q.addBindValue(label);
+        q.addBindValue(subjectPattern);
+        q.exec();
+    };
+    const qint64 invoices = LabelStore::create(QStringLiteral("Rechnungen"), QStringLiteral("#10b981"));
+    const qint64 projects = LabelStore::create(QStringLiteral("Projekte"), QStringLiteral("#6366f1"));
+    LabelStore::create(QStringLiteral("Reisen"), QStringLiteral("#f59e0b"));
+    assign(invoices, QStringLiteral("Rechnung%"));
+    assign(projects, QStringLiteral("%Release-Termin%"));
+    assign(projects, QStringLiteral("Treffen am Donnerstag"));
     db.commit();
 }
 

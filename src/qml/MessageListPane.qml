@@ -185,7 +185,9 @@ Rectangle {
             section.criteria: ViewSection.FullString
             section.labelPositioning: ViewSection.InlineLabels | ViewSection.CurrentLabelAtStart
             section.delegate: Rectangle {
-                required property string section
+                // Kein "required property section": Abschnittsköpfe werden wiederverwendet,
+                // eine required property behielte dann den alten Wert.
+                readonly property string sectionName: section
                 width: ListView.view.width
                 height: 26
                 color: Qt.alpha(Theme.sidebar, 0.95)
@@ -193,7 +195,7 @@ Rectangle {
                     anchors.left: parent.left
                     anchors.leftMargin: 14
                     anchors.verticalCenter: parent.verticalCenter
-                    text: parent.section
+                    text: parent.sectionName
                 }
                 Rectangle {
                     anchors.bottom: parent.bottom

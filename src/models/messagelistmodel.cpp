@@ -1,6 +1,7 @@
 #include "messagelistmodel.h"
 
 #include "storage/database.h"
+#include "storage/labelstore.h"
 #include "storage/mailstore.h"
 #include "storage/messageflags.h"
 
@@ -35,6 +36,7 @@ void MessageListModel::setFilter(const Filter &filter)
 void MessageListModel::reload()
 {
     beginResetModel();
+    loadLabelInfo();
     const QList<Row> top = fetchPage(0, pageSize);
     m_topLevelCount = int(top.size());
     m_hasMore = top.size() == pageSize;
@@ -45,6 +47,7 @@ void MessageListModel::reload()
 
 void MessageListModel::refresh()
 {
+    loadLabelInfo();
     const int limit = std::max(m_topLevelCount, pageSize);
     const QList<Row> top = fetchPage(0, limit);
     m_topLevelCount = int(top.size());
@@ -106,6 +109,24 @@ void MessageListModel::toggleThread(qint64 messageId)
         Q_EMIT dataChanged(index(now), index(now), {ExpandedRole});
 }
 
+void MessageListModel::loadLabelInfo()
+{
+    m_labelInfo.clear();
+    const auto labels = LabelStore::labels();
+    for (const Label &l : labels)
+        m_labelInfo.insert(l.id, {{QStringLiteral("id"), l.id}, {QStringLiteral("name"), l.name}, {QStringLiteral("color"), l.color}});
+}
+
+QVariantList MessageListModel::labelsFor(const Row &r) const
+{
+    QVariantList result;
+    for (qint64 id : r.labelIds) {
+        if (const auto it = m_labelInfo.constFind(id); it != m_labelInfo.constEnd())
+            result << it.value();
+    }
+    return result;
+}
+
 MessageListModel::Row MessageListModel::rowFromQuery(const QSqlQuery &q)
 {
     Row r;
@@ -124,6 +145,9 @@ MessageListModel::Row MessageListModel::rowFromQuery(const QSqlQuery &q)
     r.sent = q.value(11).toString() == QLatin1String(FolderRole::Sent);
     r.threadCount = std::max(1, q.value(12).toInt());
     r.threadUnread = q.value(13).toInt();
+    const auto labelIds = q.value(14).toString().split(QLatin1Char(','), Qt::SkipEmptyParts);
+    for (const QString &id : labelIds)
+        r.labelIds << id.toLongLong();
     return r;
 }
 
@@ -134,7 +158,8 @@ QList<MessageListModel::Row> MessageListModel::withChildren(const QList<Row> &to
 
     QSqlQuery q(Database::connection());
     q.prepare(QStringLiteral("SELECT m.id, m.subject, m.from_name, m.from_email, m.date, m.snippet, m.flags, m.has_attachments, a.color, "
-                             "f.name, m.thread_id, f.role, 1, (m.flags & %1) = 0 FROM messages m JOIN folders f ON f.id = m.folder_id "
+                             "f.name, m.thread_id, f.role, 1, (m.flags & %1) = 0, "
+                             "(SELECT GROUP_CONCAT(label_id) FROM message_labels WHERE message_id = m.id) FROM messages m JOIN folders f ON f.id = m.folder_id "
                              "JOIN accounts a ON a.id = m.account_id WHERE m.id = ?")
                   .arg(MessageFlag::Seen));
     QList<Row> result;
@@ -186,6 +211,10 @@ QList<MessageListModel::Row> MessageListModel::fetchPage(int offset, int limit) 
     } else if (m_filter.folderId > 0) {
         where << QStringLiteral("m.folder_id = ?");
         binds << m_filter.folderId;
+    } else if (m_filter.labelId > 0) {
+        where << QStringLiteral("m.id IN (SELECT message_id FROM message_labels WHERE label_id = ?)");
+        binds << m_filter.labelId;
+        where << QStringLiteral("f.role NOT IN ('trash', 'junk')");
     } else if (m_filter.role == QLatin1String(FolderRole::Flagged)) {
         where << QStringLiteral("(m.flags & %1) != 0").arg(MessageFlag::Flagged);
         where << QStringLiteral("f.role NOT IN ('trash', 'junk')");
@@ -210,7 +239,8 @@ QList<MessageListModel::Row> MessageListModel::fetchPage(int offset, int limit) 
                                            "m.thread_id, f.role");
     QString sql;
     if (!m_filter.threaded) {
-        sql = QStringLiteral("SELECT %1, 1, (m.flags & %2) = 0 FROM messages m JOIN folders f ON f.id = m.folder_id "
+        sql = QStringLiteral("SELECT %1, 1, (m.flags & %2) = 0, (SELECT GROUP_CONCAT(label_id) FROM message_labels WHERE message_id = m.id) "
+                             "FROM messages m JOIN folders f ON f.id = m.folder_id "
                              "JOIN accounts a ON a.id = m.account_id WHERE %3 ORDER BY m.date DESC")
                   .arg(columns)
                   .arg(MessageFlag::Seen)
@@ -226,7 +256,10 @@ QList<MessageListModel::Row> MessageListModel::fetchPage(int offset, int limit) 
                   "WITH matching AS (SELECT m.id, m.thread_id, m.date FROM messages m JOIN folders f ON f.id = m.folder_id WHERE %1), "
                   "latest AS (SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY date DESC, id DESC) AS rn "
                   "FROM matching) WHERE rn = 1) "
-                  "SELECT %2, (SELECT COUNT(*) %3), (SELECT COUNT(*) %3 AND (t.flags & %4) = 0) "
+                  "SELECT %2, (SELECT COUNT(*) %3), (SELECT COUNT(*) %3 AND (t.flags & %4) = 0), "
+                  // Labels aller Nachrichten der Konversation
+                  "(SELECT GROUP_CONCAT(DISTINCT ml.label_id) FROM message_labels ml JOIN messages t ON t.id = ml.message_id "
+                  "WHERE t.thread_id = m.thread_id AND t.account_id = m.account_id) "
                   "FROM latest l JOIN messages m ON m.id = l.id JOIN folders f ON f.id = m.folder_id "
                   "JOIN accounts a ON a.id = m.account_id ORDER BY m.date DESC")
                   .arg(condition, columns, threadScope)
@@ -367,6 +400,8 @@ QVariant MessageListModel::data(const QModelIndex &index, int role) const
         return r.child;
     case SentRole:
         return r.sent;
+    case LabelsRole:
+        return labelsFor(r);
     }
     return {};
 }
@@ -393,6 +428,7 @@ QHash<int, QByteArray> MessageListModel::roleNames() const
         {ExpandedRole, "expanded"},
         {IsChildRole, "isChild"},
         {SentRole, "sent"},
+        {LabelsRole, "labels"},
     };
 }
 

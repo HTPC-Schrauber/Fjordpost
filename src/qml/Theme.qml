@@ -31,6 +31,8 @@ QtObject {
             cyan: ["#06b6d4", "#0891b2"]
         })
     readonly property var accentNames: ["indigo", "emerald", "rose", "amber", "cyan"]
+    // Farben zur Auswahl für Labels
+    readonly property var labelColors: ["#6366f1", "#10b981", "#f43f5e", "#f59e0b", "#06b6d4", "#a855f7", "#3b82f6", "#64748b"]
 
     readonly property color accent: system ? palette.highlight : accents[settings.accent][0]
     readonly property color accentHover: system ? Qt.darker(palette.highlight, 1.15) : accents[settings.accent][1]

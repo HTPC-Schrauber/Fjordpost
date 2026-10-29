@@ -24,6 +24,7 @@ QQC2.ItemDelegate {
     required property string folderName
     required property int threadCount
     required property bool expanded
+    required property var labels
 
     readonly property bool active: ListView.isCurrentItem
     readonly property bool unified: App.selectedAccountId === 0
@@ -174,12 +175,20 @@ QQC2.ItemDelegate {
             Layout.fillWidth: true
             Layout.topMargin: 4
             spacing: 6
-            visible: card.unified || card.hasAttachments || card.flagged
+            visible: card.unified || card.hasAttachments || card.flagged || card.labels.length > 0
 
             Tag {
                 visible: card.unified
                 text: card.folderName
                 tint: card.accountColor
+            }
+            Repeater {
+                model: card.labels
+                Tag {
+                    required property var modelData
+                    text: modelData.name
+                    tint: modelData.color.length > 0 ? modelData.color : Theme.textSecondary
+                }
             }
             Rectangle {
                 visible: card.hasAttachments

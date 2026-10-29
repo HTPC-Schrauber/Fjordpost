@@ -36,6 +36,7 @@ public:
         ExpandedRole,  // Konversation aufgeklappt
         IsChildRole,   // ältere Nachricht unter einer aufgeklappten Konversation
         SentRole,      // liegt in "Gesendet"
+        LabelsRole,    // [{name, color}], in der Konversationsansicht aller Nachrichten
     };
 
     struct Filter {
@@ -45,6 +46,7 @@ public:
         QString search;       // FTS5-Suche, überschreibt Ordnerauswahl
         QString quick;        // Schnellfilter: "", "unread", "flagged", "attachments"
         bool threaded = false; // eine Zeile pro Konversation (neueste passende Nachricht)
+        qint64 labelId = 0;    // > 0: alle Nachrichten mit diesem Label (alle Konten/Ordner)
     };
 
     explicit MessageListModel(QObject *parent = nullptr);
@@ -95,6 +97,7 @@ private:
         bool child = false;
         bool sent = false;
         QDateTime groupDate; // Datumsgruppe; bei Unterzeilen die der Konversation
+        QList<qint64> labelIds;
 
         bool operator==(const Row &) const = default;
     };
@@ -103,6 +106,8 @@ private:
     // Fügt unter aufgeklappten Konversationen deren übrige Nachrichten ein.
     QList<Row> withChildren(const QList<Row> &topLevel) const;
     static Row rowFromQuery(const QSqlQuery &q);
+    QVariantList labelsFor(const Row &r) const;
+    void loadLabelInfo();
     static QString formatDate(const QDateTime &date);
     static QString dateGroup(const QDateTime &date);
     static QString ftsQuery(const QString &text);
@@ -111,6 +116,7 @@ private:
     QList<Row> m_rows;
     int m_topLevelCount = 0; // Zeilen ohne Unterzeilen (für das seitenweise Nachladen)
     QSet<qint64> m_expandedThreads;
+    QHash<qint64, QVariantMap> m_labelInfo; // bei jedem Laden aktualisiert
     bool m_hasMore = false;
 };
 

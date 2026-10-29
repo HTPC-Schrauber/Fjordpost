@@ -145,13 +145,14 @@ static FolderState folderFromQuery(const QSqlQuery &q)
     f.uidValidity = q.value(3).toLongLong();
     f.uidNext = q.value(4).toLongLong();
     f.highestModSeq = q.value(5).toULongLong();
+    f.keywords = q.value(6).toBool();
     return f;
 }
 
 QList<FolderState> folders(qint64 accountId)
 {
     QSqlQuery q(Database::connection());
-    q.prepare(QStringLiteral("SELECT id, path, role, uidvalidity, uidnext, highestmodseq FROM folders WHERE account_id = ? "
+    q.prepare(QStringLiteral("SELECT id, path, role, uidvalidity, uidnext, highestmodseq, keywords FROM folders WHERE account_id = ? "
                              "ORDER BY CASE role WHEN 'inbox' THEN 0 ELSE 1 END, sort_order, path"));
     q.addBindValue(accountId);
     exec(q);
@@ -164,7 +165,7 @@ QList<FolderState> folders(qint64 accountId)
 FolderState folder(qint64 folderId)
 {
     QSqlQuery q(Database::connection());
-    q.prepare(QStringLiteral("SELECT id, path, role, uidvalidity, uidnext, highestmodseq FROM folders WHERE id = ?"));
+    q.prepare(QStringLiteral("SELECT id, path, role, uidvalidity, uidnext, highestmodseq, keywords FROM folders WHERE id = ?"));
     q.addBindValue(folderId);
     return exec(q) && q.next() ? folderFromQuery(q) : FolderState{};
 }
@@ -260,10 +261,11 @@ QStringList pendingFolderCreations(qint64 accountId)
 void saveFolderState(const FolderState &state)
 {
     QSqlQuery q(Database::connection());
-    q.prepare(QStringLiteral("UPDATE folders SET uidvalidity = ?, uidnext = ?, highestmodseq = ? WHERE id = ?"));
+    q.prepare(QStringLiteral("UPDATE folders SET uidvalidity = ?, uidnext = ?, highestmodseq = ?, keywords = ? WHERE id = ?"));
     q.addBindValue(state.uidValidity);
     q.addBindValue(state.uidNext);
     q.addBindValue(qint64(state.highestModSeq));
+    q.addBindValue(state.keywords ? 1 : 0);
     q.addBindValue(state.id);
     exec(q);
 }

@@ -22,6 +22,17 @@ Rectangle {
     signal navigate(int delta)
     signal toggleDrawer()
     signal notify(string message)
+    signal newLabelRequested(var messageId)
+
+    function openLabelMenu() {
+        if (hasMessage)
+            labelMenu.openFor(msg.id, labelButton);
+    }
+
+    LabelMenu {
+        id: labelMenu
+        onNewLabelRequested: id => pane.newLabelRequested(id)
+    }
 
     color: Theme.reading
 
@@ -120,6 +131,19 @@ Rectangle {
                     iconName: "mail-mark-junk"
                     tooltip: i18n("Move to spam")
                     onClicked: App.moveToRole(pane.msg.id, "junk")
+                }
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 16
+                    Layout.leftMargin: 6
+                    Layout.rightMargin: 6
+                    color: Theme.border
+                }
+                IconButton {
+                    id: labelButton
+                    iconName: "tag"
+                    tooltip: i18n("Labels (L)")
+                    onClicked: pane.openLabelMenu()
                 }
 
                 Item {
@@ -243,6 +267,14 @@ Rectangle {
                 Tag {
                     text: pane.msg.accountName ?? ""
                     tint: pane.msg.accountColor ?? Theme.accent
+                }
+                Repeater {
+                    model: pane.msg.labels ?? []
+                    Tag {
+                        required property var modelData
+                        text: modelData.name
+                        tint: modelData.color.length > 0 ? modelData.color : Theme.textSecondary
+                    }
                 }
             }
 

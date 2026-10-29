@@ -7,6 +7,7 @@ add_library(fjordpostcore STATIC
     storage/database.cpp
     storage/demodata.cpp
     storage/mailstore.cpp
+    storage/labelstore.cpp
     mail/autoconfig/autoconfig.cpp
     mail/imap/imapaccount.cpp
     mail/imap/imapconnection.cpp
@@ -17,6 +18,7 @@ add_library(fjordpostcore STATIC
     mail/smtp/smtpsender.cpp
     models/accountmodel.cpp
     models/foldermodel.cpp
+    models/labelmodel.cpp
     models/messagelistmodel.cpp
     integration/accountsetup.cpp
     integration/appcontroller.cpp
@@ -46,6 +48,8 @@ ecm_target_qml_sources(fjordpost SOURCES
     qml/MessageListPane.qml
     qml/MessageDelegate.qml
     qml/ThreadChildDelegate.qml
+    qml/LabelDialog.qml
+    qml/LabelMenu.qml
     qml/ReaderPane.qml
     qml/RailButton.qml
     qml/ComposerForm.qml

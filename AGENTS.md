@@ -34,7 +34,7 @@ build/bin/fjordpost --demo --offline --data-dir /tmp/fjordpost-demo
 | `--offline` | keine Serververbindungen |
 | `--data-dir <dir>` | eigenes Datenverzeichnis (echte Daten nie für Tests nutzen) |
 | `--screenshot <png>` | Fenster nach 3 s als Bild speichern und beenden (startet auch neben laufender Instanz) |
-| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light`, `undo-send`, `open-thread`, `expand-thread`, `thread-history` |
+| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light`, `undo-send`, `open-thread`, `expand-thread`, `thread-history`, `label-menu`, `label-dialog`, `label-filter` |
 
 Oberflächenänderungen immer per `--screenshot` prüfen und die Konsolenausgabe auf
 QML-Warnungen kontrollieren. Achtung: `--dev-action light` speichert den hellen Modus in
@@ -46,6 +46,7 @@ QML-Warnungen kontrollieren. Achtung: `--dev-action light` speichert den hellen 
 src/
   core/         Account, AccountManager (DB), SecretStore (QtKeychain → KWallet)
   storage/      Database (Migrationen, FTS5), BlobStore (.eml-Dateien), MailStore (Sync-DB-Zugriffe),
+                LabelStore (Labels, auf dem Server als IMAP-Schlüsselwörter),
                 messageflags.h (Flag-Bitmaske, Ordnerrollen), demodata
   mail/
     imap/       ImapConnection (Login + serielle Task-Queue), ImapAccount (Sync, IDLE, Offline-Ops)
@@ -102,6 +103,10 @@ Grundprinzipien:
   `components/ThemedDialog.qml`.
 - `Kirigami.Avatar` gibt es in KF6 nicht mehr → `org.kde.kirigamiaddons.components` oder
   `components/InitialsAvatar.qml`.
+- **Abschnittsköpfe einer ListView** (`section.delegate`) werden wiederverwendet: keine
+  `required property section`, sie behielte den alten Wert – Kontext-Eigenschaft `section` lesen.
+- In einem `MenuItem` verdeckt dessen Eigenschaft `menu` eine gleichnamige ID des Menüs
+  (Menü daher nie `id: menu` nennen).
 - Unicode-Property-Escapes (`\p{L}`) in QML-JavaScript funktionieren nicht.
 - `toString()`-Überladungen für eigene Enums kollidieren mit `QCOMPARE` (ADL) → eindeutige Namen.
 - **KSMTP wird nicht verwendet:** wertet auf mehrere TCP-Pakete verteilte Antwortzeilen
@@ -132,7 +137,7 @@ Die Oberfläche folgt dem Entwurf `mopmail_ui.html` des Projektinhabers:
 |---|---|---|
 | M0 | Grundgerüst, DB, Oberfläche mit Demo-Daten | fertig |
 | M1 | IMAP + SMTP, Kontoeinrichtung, Lesen/Schreiben, Design-Umbau | fertig, Servertest grün; manueller Oberflächentest offen |
-| M2 | POP3, Threading, Snooze, Labels, Filterregeln, Signaturen, Senden rückgängig, Import/Export | begonnen: Signaturen, Senden rückgängig, Konversationen |
+| M2 | POP3, Threading, Snooze, Labels, Filterregeln, Signaturen, Senden rückgängig, Import/Export | begonnen: Signaturen, Senden rückgängig, Konversationen, Labels |
 | M3 | CardDAV/CalDAV, Kalender, Kontakte, Aufgaben, Einladungen | geplant |
 | M4 | Google OAuth2 (Gmail, Kontakte, Kalender) | geplant |
 | M5 | OpenPGP + S/MIME (QGpgME) | geplant |
