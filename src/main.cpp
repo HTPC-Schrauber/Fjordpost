@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
     parser.addOption(demoOption);
     parser.addOption(dataDirOption);
     parser.addOption(offlineOption);
-    QCommandLineOption devActionOption(QStringLiteral("dev-action"), i18n("Trigger a UI action before the screenshot (open-first, compose, reply, setup)."), i18n("action"));
+    QCommandLineOption devActionOption(QStringLiteral("dev-action"), i18n("Trigger a UI action before the screenshot (open-first, compose, compose-window, reply, setup, settings, light)."), i18n("action"));
     parser.addOption(screenshotOption);
     parser.addOption(devActionOption);
     about.setupCommandLine(&parser);
@@ -77,7 +77,8 @@ int main(int argc, char *argv[])
     about.processCommandLine(&parser);
 
     // Nur eine Instanz; ein zweiter Start bringt das vorhandene Fenster nach vorn.
-    KDBusService service(KDBusService::Unique);
+    // Screenshot-Läufe (Entwicklung) dürfen neben einer laufenden Instanz starten.
+    KDBusService service(parser.isSet(screenshotOption) ? KDBusService::Multiple : KDBusService::Unique);
 
     const QString dataDir = parser.isSet(dataDirOption) ? parser.value(dataDirOption)
                                                          : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);

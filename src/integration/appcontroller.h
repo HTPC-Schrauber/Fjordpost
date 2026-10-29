@@ -81,6 +81,8 @@ public:
     Q_INVOKABLE QString cacheSize() const;
     // Farben für die Darstellung von Klartext-Mails (aus dem QML-Theme).
     Q_INVOKABLE void setReaderColors(const QString &background, const QString &text, const QString &link, const QString &muted);
+    // Anwendungsweites Farbschema aus den Theme-Farben; leere Map = Systemfarben.
+    Q_INVOKABLE void applyColorScheme(const QVariantMap &colors);
 
     // Composer
     Q_INVOKABLE QVariantList identities() const;

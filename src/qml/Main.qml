@@ -31,15 +31,60 @@ Kirigami.AbstractApplicationWindow {
     // Aktiver Bereich der App-Leiste: "mail", "calendar", "contacts", "tasks"
     property string section: "mail"
 
+    // Anwendungsweites KDE-Farbschema aus den Theme-Farben, damit auch Dialoge,
+    // Menüs und Auswahllisten passen. Mit "KDE-Farbschema verwenden" die Systemfarben.
+    function applyColorScheme() {
+        if (Theme.system) {
+            App.applyColorScheme({});
+            return;
+        }
+        App.applyColorScheme({
+            view: String(Theme.elevated),
+            viewAlternate: String(Theme.card),
+            window: String(Theme.sidebar),
+            button: String(Theme.card),
+            header: String(Theme.dock),
+            text: String(Theme.textPrimary),
+            textInactive: String(Theme.textMuted),
+            accent: String(Theme.accent),
+            accentText: String(Theme.accentText),
+            negative: String(Theme.danger),
+            neutral: String(Theme.warning),
+            positive: String(Theme.success)
+        });
+    }
+    readonly property string colorSchemeKey: Theme.system ? "system" : [Theme.dark, Theme.settings.accent].join()
+    onColorSchemeKeyChanged: applyColorScheme()
+
     function notify(message) {
         toast.show(message);
     }
 
     function compose(messageId, mode) {
-        const window = composerComponent.createObject(null, {
-            data: App.composeData(messageId, mode)
+        openComposer(App.composeData(messageId, mode), false);
+    }
+
+    // Öffnet den Composer je nach Einstellung im Hauptfenster oder in einem eigenen
+    // Fenster. Ist im Hauptfenster schon eine angefangene Nachricht offen, bekommt
+    // die neue ein eigenes Fenster, damit nichts verloren geht.
+    function openComposer(data, forceWindow) {
+        const inlineBusy = inlineComposer.item !== null && inlineComposer.item.dirty;
+        if (!forceWindow && Prefs.compose.openIn === "inline" && !inlineBusy) {
+            inlineComposer.active = false;
+            inlineComposer.composeData = data;
+            inlineComposer.openedFor = App.currentMessage.id;
+            inlineComposer.active = true;
+            inlineComposer.item.forceActiveFocus();
+            return;
+        }
+        const window = composerWindowComponent.createObject(null, {
+            draft: data
         });
-        window.closing.connect(() => window.destroy());
+        window.notify.connect(root.notify);
+        window.closing.connect(close => {
+            if (close.accepted)
+                window.destroy();
+        });
         window.show();
     }
 
@@ -51,8 +96,12 @@ Kirigami.AbstractApplicationWindow {
                 compose(App.currentMessage.id, "reply");
         } else if (name === "compose") {
             compose(0, "new");
+        } else if (name === "compose-window") {
+            openComposer(App.composeData(0, "new"), true);
         } else if (name === "setup") {
             accountSetup.open();
+        } else if (name === "settings") {
+            settingsDialog.open();
         } else if (name === "light") {
             Theme.settings.dark = false;
             messageList.openFirst();
@@ -60,8 +109,13 @@ Kirigami.AbstractApplicationWindow {
     }
 
     Component {
-        id: composerComponent
-        Composer {}
+        id: composerWindowComponent
+        ComposerWindow {}
+    }
+
+    SettingsDialog {
+        id: settingsDialog
+        parent: root.overlay
     }
 
     AccountSetupDialog {
@@ -77,6 +131,7 @@ Kirigami.AbstractApplicationWindow {
     }
 
     Component.onCompleted: {
+        applyColorScheme();
         if (!App.hasAccounts)
             accountSetup.open();
     }
@@ -104,7 +159,7 @@ Kirigami.AbstractApplicationWindow {
                     else
                         root.notify(i18n("%1 will be available with CalDAV/CardDAV support.", name === "calendar" ? i18n("The calendar") : name === "contacts" ? i18n("The address book") : i18n("The task list")));
                 }
-                onSettingsRequested: root.notify(i18n("Settings are coming in a later version."))
+                onSettingsRequested: settingsDialog.open()
                 onAddAccountRequested: accountSetup.open()
             }
 
@@ -127,16 +182,55 @@ Kirigami.AbstractApplicationWindow {
                     QQC2.SplitView.minimumWidth: 280
                 }
 
-                ReaderPane {
+                // Lesebereich; ein Composer im Hauptfenster liegt an derselben Stelle darüber.
+                Item {
                     QQC2.SplitView.fillWidth: true
                     QQC2.SplitView.minimumWidth: 380
-                    position: messageList.list.currentIndex
-                    total: messageList.list.count
-                    drawerVisible: Theme.settings.contextDrawer
-                    onReplyRequested: mode => root.compose(App.currentMessage.id, mode)
-                    onNavigate: delta => messageList.step(delta)
-                    onToggleDrawer: Theme.settings.contextDrawer = !Theme.settings.contextDrawer
-                    onNotify: message => root.notify(message)
+
+                    ReaderPane {
+                        anchors.fill: parent
+                        visible: !inlineComposer.active
+                        position: messageList.list.currentIndex
+                        total: messageList.list.count
+                        drawerVisible: Theme.settings.contextDrawer
+                        onReplyRequested: mode => root.compose(App.currentMessage.id, mode)
+                        onNavigate: delta => messageList.step(delta)
+                        onToggleDrawer: Theme.settings.contextDrawer = !Theme.settings.contextDrawer
+                        onNotify: message => root.notify(message)
+                    }
+
+                    Loader {
+                        id: inlineComposer
+                        property var composeData: ({})
+                        // Beim Öffnen angezeigte Nachricht; nur ein Wechsel schließt den Composer.
+                        property var openedFor
+                        anchors.fill: parent
+                        active: false
+                        sourceComponent: ComposerForm {
+                            inline: true
+                            draft: inlineComposer.composeData
+                            onFinished: inlineComposer.active = false
+                            onNotify: message => root.notify(message)
+                            onPopOutRequested: state => {
+                                inlineComposer.active = false;
+                                root.openComposer(state, true);
+                            }
+                        }
+                    }
+
+                    // Wird eine andere Nachricht geöffnet, weicht ein unveränderter Composer.
+                    Connections {
+                        target: App
+                        function onCurrentMessageChanged() {
+                            if (!inlineComposer.item || App.currentMessage.id === undefined || App.currentMessage.id === inlineComposer.openedFor)
+                                return;
+                            inlineComposer.openedFor = App.currentMessage.id;
+                            if (inlineComposer.item.dirty)
+                                root.notify(i18n("Your message is still open: send it, save it as a draft or discard it."));
+                            else
+                                inlineComposer.active = false;
+                        }
+                    }
                 }
 
                 ContextDrawer {

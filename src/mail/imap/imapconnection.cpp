@@ -161,8 +161,16 @@ void ImapConnection::disconnectFromServer()
 {
     m_queue.clear();
     if (m_session && m_loggedIn) {
-        auto *logout = new KIMAP::LogoutJob(m_session);
+        // Sitzung erst nach der Antwort auf LOGOUT schließen, sonst geht der Befehl verloren.
+        KIMAP::Session *session = m_session;
+        session->disconnect(this);
+        auto *logout = new KIMAP::LogoutJob(session);
+        connect(logout, &KJob::result, session, [session] {
+            session->close();
+            session->deleteLater();
+        });
         logout->start();
+        m_session = nullptr;
     }
     resetSession();
     m_running = false;

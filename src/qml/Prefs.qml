@@ -1,0 +1,13 @@
+pragma Singleton
+
+import QtQuick
+import QtCore
+
+// Allgemeine Einstellungen (Darstellung liegt in Theme.settings).
+QtObject {
+    readonly property Settings compose: Settings {
+        category: "Compose"
+        // "inline": im Hauptfenster anstelle des Lesebereichs, "window": eigenes Fenster
+        property string openIn: "inline"
+    }
+}

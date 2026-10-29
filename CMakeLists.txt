@@ -23,11 +23,10 @@ ecm_setup_version(${PROJECT_VERSION}
     VERSION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/mopmail-version.h")
 
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Sql Network Widgets DBus WebEngineQuick Test)
-find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS CoreAddons I18n Config DBusAddons Crash Kirigami Notifications StatusNotifierItem)
+find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS CoreAddons I18n Config ColorScheme DBusAddons Crash Kirigami Notifications StatusNotifierItem)
 find_package(Qt6Keychain REQUIRED)
 find_package(KPim6Mime REQUIRED)
 find_package(KPim6IMAP REQUIRED)
-find_package(KPim6SMTP REQUIRED)
 
 add_subdirectory(src)
 

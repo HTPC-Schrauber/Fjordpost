@@ -6,38 +6,31 @@ import org.kde.kirigami as Kirigami
 import org.mopmail.core
 import "components"
 
-// Fenster zum Verfassen einer Nachricht (neu, Antwort, Weiterleitung).
-Kirigami.AbstractApplicationWindow {
+// Inhalt des Composers (neu, Antwort, Weiterleitung). Wird entweder im Hauptfenster
+// anstelle des Lesebereichs (inline) oder in einem eigenen ComposerWindow angezeigt.
+Rectangle {
     id: composer
 
-    // Vorbelegung aus App.composeData()
-    property var data: ({})
-    property var attachments: data.attachments ?? []
+    // Vorbelegung aus App.composeData() bzw. collect() beim Herauslösen
+    property var draft: ({})
+    property var attachments: draft.attachments ?? []
     property bool dirty: false
-    property bool closingConfirmed: false
+    // Im Hauptfenster: Knopf zum Herauslösen in ein eigenes Fenster anzeigen
+    property bool inline: false
 
-    title: subjectField.text.length > 0 ? subjectField.text : i18n("New Message")
-    width: Kirigami.Units.gridUnit * 42
-    height: Kirigami.Units.gridUnit * 34
-    minimumWidth: Kirigami.Units.gridUnit * 25
-    minimumHeight: Kirigami.Units.gridUnit * 20
+    readonly property string title: subjectField.text.length > 0 ? subjectField.text : i18n("New Message")
+
+    // Senden oder Verwerfen abgeschlossen: der Gastgeber schließt den Composer.
+    signal finished()
+    signal popOutRequested(var state)
+    signal notify(string message)
+
     color: Theme.elevated
-
-    Kirigami.Theme.inherit: false
-    Kirigami.Theme.colorSet: Kirigami.Theme.View
-    Kirigami.Theme.backgroundColor: Theme.elevated
-    Kirigami.Theme.alternateBackgroundColor: Theme.card
-    Kirigami.Theme.textColor: Theme.textPrimary
-    Kirigami.Theme.disabledTextColor: Theme.textMuted
-    Kirigami.Theme.highlightColor: Theme.accent
-    Kirigami.Theme.highlightedTextColor: Theme.accentText
-    Kirigami.Theme.hoverColor: Theme.accent
-    Kirigami.Theme.focusColor: Theme.accent
 
     function collect() {
         return {
-            mode: data.mode ?? "new",
-            referenceId: data.referenceId ?? 0,
+            mode: draft.mode ?? "new",
+            referenceId: draft.referenceId ?? 0,
             accountId: fromBox.currentValue,
             to: toField.text,
             cc: ccField.text,
@@ -45,8 +38,10 @@ Kirigami.AbstractApplicationWindow {
             subject: subjectField.text,
             body: bodyArea.text,
             attachments: composer.attachments,
-            inReplyTo: data.inReplyTo ?? "",
-            references: data.references ?? []
+            showCc: ccRow.visible,
+            dirty: composer.dirty,
+            inReplyTo: draft.inReplyTo ?? "",
+            references: draft.references ?? []
         };
     }
 
@@ -57,8 +52,9 @@ Kirigami.AbstractApplicationWindow {
             errorMessage.visible = true;
             return;
         }
-        closingConfirmed = true;
-        close();
+        dirty = false;
+        notify(i18n("Message queued for sending."));
+        finished();
     }
 
     function saveDraft() {
@@ -69,24 +65,43 @@ Kirigami.AbstractApplicationWindow {
             return false;
         }
         dirty = false;
-        showPassiveNotification(i18n("Draft saved."));
+        notify(i18n("Draft saved."));
         return true;
     }
 
-    onClosing: close => {
-        if (dirty && !closingConfirmed) {
-            close.accepted = false;
-            discardDialog.open();
+    // Schließen anfordern; bei ungesicherten Änderungen erst nachfragen.
+    // Liefert true, wenn sofort geschlossen wird.
+    function requestClose() {
+        if (!dirty) {
+            finished();
+            return true;
         }
+        discardDialog.open();
+        return false;
+    }
+
+    function discard() {
+        dirty = false;
+        finished();
     }
 
     Component.onCompleted: {
-        if ((data.to ?? "").length > 0)
+        if ((draft.to ?? "").length > 0)
             bodyArea.forceActiveFocus();
         else
             toField.forceActiveFocus();
         bodyArea.cursorPosition = 0;
-        dirty = false;
+        dirty = draft.dirty ?? false;
+    }
+
+    Keys.onEscapePressed: requestClose()
+
+    function hasFocusWithin() {
+        for (let item = Window.activeFocusItem; item; item = item.parent) {
+            if (item === composer)
+                return true;
+        }
+        return false;
     }
 
     ColumnLayout {
@@ -116,7 +131,7 @@ Kirigami.AbstractApplicationWindow {
                 }
                 QQC2.Label {
                     Layout.fillWidth: true
-                    text: (composer.data.mode ?? "new") === "new" ? i18n("Compose new message") : (composer.data.mode === "forward" ? i18n("Forward message") : i18n("Reply"))
+                    text: (composer.draft.mode ?? "new") === "new" ? i18n("Compose new message") : (composer.draft.mode === "forward" ? i18n("Forward message") : i18n("Reply"))
                     font.pointSize: Theme.fontXs
                     font.weight: Font.DemiBold
                     color: Theme.textPrimary
@@ -126,6 +141,18 @@ Kirigami.AbstractApplicationWindow {
                     display: QQC2.AbstractButton.TextOnly
                     active: ccRow.visible
                     onClicked: ccRow.visible = bccRow.visible = !ccRow.visible
+                }
+                IconButton {
+                    visible: composer.inline
+                    iconName: "window-new"
+                    tooltip: i18n("Open in separate window")
+                    onClicked: composer.popOutRequested(composer.collect())
+                }
+                IconButton {
+                    visible: composer.inline
+                    iconName: "window-close"
+                    tooltip: i18n("Close (Esc)")
+                    onClicked: composer.requestClose()
                 }
             }
         }
@@ -155,7 +182,7 @@ Kirigami.AbstractApplicationWindow {
                 model: App.identities()
                 textRole: "text"
                 valueRole: "accountId"
-                Component.onCompleted: currentIndex = Math.max(0, indexOfValue(composer.data.accountId))
+                Component.onCompleted: currentIndex = Math.max(0, indexOfValue(composer.draft.accountId))
             }
 
             FieldLabel {
@@ -164,7 +191,7 @@ Kirigami.AbstractApplicationWindow {
             Field {
                 id: toField
                 Layout.fillWidth: true
-                text: composer.data.to ?? ""
+                text: composer.draft.to ?? ""
                 placeholderText: i18n("Recipients, separated by commas")
                 onTextEdited: composer.dirty = true
             }
@@ -177,7 +204,7 @@ Kirigami.AbstractApplicationWindow {
                 id: ccField
                 Layout.fillWidth: true
                 visible: ccRow.visible
-                text: composer.data.cc ?? ""
+                text: composer.draft.cc ?? ""
                 onTextEdited: composer.dirty = true
             }
 
@@ -189,6 +216,7 @@ Kirigami.AbstractApplicationWindow {
                 id: bccField
                 Layout.fillWidth: true
                 visible: bccRow.visible
+                text: composer.draft.bcc ?? ""
                 onTextEdited: composer.dirty = true
             }
 
@@ -198,7 +226,7 @@ Kirigami.AbstractApplicationWindow {
             Field {
                 id: subjectField
                 Layout.fillWidth: true
-                text: composer.data.subject ?? ""
+                text: composer.draft.subject ?? ""
                 onTextEdited: composer.dirty = true
             }
         }
@@ -206,7 +234,7 @@ Kirigami.AbstractApplicationWindow {
         // Sichtbarkeit der Cc/Bcc-Zeilen (zu Beginn nur, wenn vorbelegt)
         QtObject {
             id: ccRow
-            property bool visible: (composer.data.cc ?? "").length > 0
+            property bool visible: composer.draft.showCc ?? ((composer.draft.cc ?? "").length > 0 || (composer.draft.bcc ?? "").length > 0)
         }
         QtObject {
             id: bccRow
@@ -253,7 +281,7 @@ Kirigami.AbstractApplicationWindow {
                 color: Theme.textPrimary
                 placeholderText: i18n("Write your message…")
                 placeholderTextColor: Theme.textMuted
-                text: composer.data.body ?? ""
+                text: composer.draft.body ?? ""
                 wrapMode: TextEdit.Wrap
                 textFormat: TextEdit.PlainText
                 leftPadding: Kirigami.Units.gridUnit
@@ -305,10 +333,7 @@ Kirigami.AbstractApplicationWindow {
                 IconButton {
                     text: i18n("Discard")
                     display: QQC2.AbstractButton.TextOnly
-                    onClicked: {
-                        composer.closingConfirmed = true;
-                        composer.close();
-                    }
+                    onClicked: composer.discard()
                 }
                 AccentButton {
                     text: i18n("Send")
@@ -335,19 +360,22 @@ Kirigami.AbstractApplicationWindow {
 
     Kirigami.PromptDialog {
         id: discardDialog
+        Kirigami.Theme.inherit: false
+        Kirigami.Theme.colorSet: Kirigami.Theme.View
+        Kirigami.Theme.backgroundColor: Theme.elevated
+        Kirigami.Theme.textColor: Theme.textPrimary
+        Kirigami.Theme.highlightColor: Theme.accent
+        Kirigami.Theme.highlightedTextColor: Theme.accentText
+        Kirigami.Theme.hoverColor: Theme.accent
+        Kirigami.Theme.focusColor: Theme.accent
         title: i18n("Discard message?")
         subtitle: i18n("The message has not been sent. Do you want to save it as a draft?")
         standardButtons: Kirigami.Dialog.Save | Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
         onAccepted: {
-            if (composer.saveDraft()) {
-                composer.closingConfirmed = true;
-                composer.close();
-            }
+            if (composer.saveDraft())
+                composer.finished();
         }
-        onDiscarded: {
-            composer.closingConfirmed = true;
-            composer.close();
-        }
+        onDiscarded: composer.discard()
     }
 
     component FieldLabel: QQC2.Label {
@@ -372,7 +400,10 @@ Kirigami.AbstractApplicationWindow {
     }
 
     Shortcut {
-        sequence: "Ctrl+Return"
-        onActivated: composer.send()
+        sequences: ["Ctrl+Return", "Ctrl+Enter"]
+        onActivated: {
+            if (composer.hasFocusWithin())
+                composer.send();
+        }
     }
 }

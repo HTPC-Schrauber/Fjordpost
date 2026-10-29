@@ -8,6 +8,7 @@
 
 #include <KIMAP/AppendJob>
 #include <KIMAP/CopyJob>
+#include <KIMAP/CreateJob>
 #include <KIMAP/ExpungeJob>
 #include <KIMAP/FetchJob>
 #include <KIMAP/IdleJob>
@@ -17,6 +18,7 @@
 #include <KIMAP/SelectJob>
 #include <KIMAP/Session>
 #include <KIMAP/StoreJob>
+#include <KIMAP/SubscribeJob>
 #include <KLocalizedString>
 
 #include <QLoggingCategory>
@@ -28,20 +30,6 @@ Q_DECLARE_LOGGING_CATEGORY(lcImap)
 namespace MopMail {
 
 namespace {
-
-int roleRank(const QString &role)
-{
-    static const QStringList order = {
-        QString::fromLatin1(FolderRole::Inbox),
-        QString::fromLatin1(FolderRole::Drafts),
-        QString::fromLatin1(FolderRole::Sent),
-        QString::fromLatin1(FolderRole::Archive),
-        QString::fromLatin1(FolderRole::Junk),
-        QString::fromLatin1(FolderRole::Trash),
-    };
-    const int idx = order.indexOf(role);
-    return idx >= 0 ? idx : 10;
-}
 
 KIMAP::ImapSet uidSet(qint64 uid)
 {
@@ -183,9 +171,10 @@ void ImapAccount::listFolders(KIMAP::Session *session, Done done)
                 QString name = box.separator.isNull() ? box.name : box.name.section(box.separator, -1);
                 if (role == QLatin1String(FolderRole::Inbox))
                     name = i18n("Inbox");
-                MailStore::upsertFolder(m_account.id, box.name, name, role, box.separator.isNull() ? QString() : QString(box.separator), roleRank(role));
+                MailStore::upsertFolder(m_account.id, box.name, name, role, box.separator.isNull() ? QString() : QString(box.separator), MailStore::roleSortOrder(role));
                 paths << box.name;
             }
+            paths << MailStore::pendingFolderCreations(m_account.id);
             MailStore::removeFoldersExcept(m_account.id, paths);
         }
         Q_EMIT foldersChanged();
@@ -521,6 +510,25 @@ void ImapAccount::runOp(KIMAP::Session *session, const PendingOp &op, std::funct
         done(job->error() && !m_interactive->isConnected());
     };
 
+    if (op.op == QLatin1String("create")) {
+        // Existiert der Ordner schon (z. B. von einem anderen Client angelegt), lehnt
+        // der Server ab; die Operation ist dann trotzdem erledigt.
+        auto *create = new KIMAP::CreateJob(session);
+        create->setMailBox(op.folderPath);
+        connect(create, &KJob::result, this, [this, session, op, finished](KJob *j) {
+            if (j->error() && !m_interactive->isConnected()) {
+                finished(j);
+                return;
+            }
+            auto *subscribe = new KIMAP::SubscribeJob(session);
+            subscribe->setMailBox(op.folderPath);
+            connect(subscribe, &KJob::result, this, finished);
+            subscribe->start();
+        });
+        create->start();
+        return;
+    }
+
     selectMailbox(m_interactive, session, op.folderPath, [this, session, op, done, finished](bool ok) {
         if (!ok) {
             done(!m_interactive->isConnected());
@@ -614,10 +622,13 @@ void ImapAccount::runOp(KIMAP::Session *session, const PendingOp &op, std::funct
 
 void ImapAccount::append(const QString &role, const QByteArray &raw, const QList<QByteArray> &flags)
 {
-    const qint64 folderId = MailStore::folderIdForRole(m_account.id, role);
+    const qint64 folderId = MailStore::ensureFolderForRole(m_account.id, role);
     if (folderId == 0)
         return;
     const QString path = MailStore::folder(folderId).path;
+    // Ein eben erst angelegter Ordner muss vor dem APPEND auf dem Server existieren;
+    // beide Aufgaben laufen nacheinander auf der interaktiven Verbindung.
+    flushPendingOps();
     m_interactive->enqueue([this, folderId, path, raw, flags](KIMAP::Session *session, Done done) {
         auto *job = new KIMAP::AppendJob(session);
         job->setMailBox(path);

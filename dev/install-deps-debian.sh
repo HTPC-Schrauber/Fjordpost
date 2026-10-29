@@ -10,10 +10,10 @@ apt-get install -y --no-install-recommends \
   qml6-module-qtquick-dialogs qml6-module-qtqml-workerscript qml6-module-qtwebengine \
   qml6-module-qt-labs-platform \
   libkirigami-dev qml6-module-org-kde-kirigami qml6-module-org-kde-desktop qml6-module-org-kde-coreaddons \
-  libkf6i18n-dev libkf6config-dev libkf6coreaddons-dev libkf6notifications-dev \
+  libkf6i18n-dev libkf6config-dev libkf6colorscheme-dev libkf6coreaddons-dev libkf6notifications-dev \
   libkf6dbusaddons-dev libkf6statusnotifieritem-dev libkf6crash-dev libkf6windowsystem-dev \
   libkf6contacts-dev libkf6calendarcore-dev libkf6kio-dev \
-  libkimap-dev libkmime-dev libksmtp-dev \
+  libkimap-dev libkmime-dev \
   libqgpgmeqt6-dev libgpgmepp-dev qtkeychain-qt6-dev \
   kirigami-addons-dev qml6-module-org-kde-kirigamiaddons-components qml6-module-org-kde-kirigamiaddons-formcard \
   qml6-module-org-kde-kirigamiaddons-delegates qml6-module-org-kde-kirigamiaddons-datetime \

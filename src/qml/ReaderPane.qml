@@ -542,7 +542,7 @@ Rectangle {
                         IconButton {
                             iconName: "view-fullscreen"
                             iconSize: 14
-                            tooltip: i18n("Open in composer window")
+                            tooltip: i18n("Open in composer")
                             onClicked: pane.replyRequested("reply")
                         }
                     }

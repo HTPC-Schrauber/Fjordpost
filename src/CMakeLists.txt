@@ -13,28 +13,31 @@ add_library(mopmailcore STATIC
     mail/mailservice.cpp
     mail/mime/messagebuilder.cpp
     mail/mime/messageparser.cpp
+    mail/net/linesocket.cpp
     mail/smtp/smtpsender.cpp
     models/accountmodel.cpp
     models/foldermodel.cpp
     models/messagelistmodel.cpp
     integration/accountsetup.cpp
     integration/appcontroller.cpp
+    integration/colorscheme.cpp
     integration/notifier.cpp
 )
 target_include_directories(mopmailcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(mopmailcore PUBLIC
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Sql Qt6::Network Qt6::DBus
-    KF6::CoreAddons KF6::I18n KF6::ConfigCore KF6::Notifications KF6::StatusNotifierItem
+    KF6::CoreAddons KF6::I18n KF6::ConfigCore KF6::ColorScheme KF6::Notifications KF6::StatusNotifierItem
     Qt6Keychain::Qt6Keychain
-    KPim6::Mime KPim6::IMAP KPim6::SMTP
+    KPim6::Mime KPim6::IMAP
 )
 
 add_executable(mopmail main.cpp integration/remotecontentblocker.cpp)
 
 ecm_add_qml_module(mopmail URI org.mopmail.app GENERATE_PLUGIN_SOURCE)
-set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Theme.qml qml/Prefs.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 ecm_target_qml_sources(mopmail SOURCES
     qml/Theme.qml
+    qml/Prefs.qml
     qml/HeaderBar.qml
     qml/ContextDrawer.qml
     qml/Main.qml
@@ -44,7 +47,9 @@ ecm_target_qml_sources(mopmail SOURCES
     qml/MessageDelegate.qml
     qml/ReaderPane.qml
     qml/RailButton.qml
-    qml/Composer.qml
+    qml/ComposerForm.qml
+    qml/ComposerWindow.qml
+    qml/SettingsDialog.qml
     qml/AccountSetupDialog.qml
 )
 ecm_target_qml_sources(mopmail PATH components SOURCES
@@ -56,6 +61,7 @@ ecm_target_qml_sources(mopmail PATH components SOURCES
     qml/components/SearchBox.qml
     qml/components/SectionLabel.qml
     qml/components/Tag.qml
+    qml/components/ThemedDialog.qml
     qml/components/Toast.qml
 )
 

@@ -3,9 +3,10 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.mopmail.core
+import "components"
 
 // Konto-Assistent: Schritt 1 Adresse/Passwort, Schritt 2 Servereinstellungen prüfen.
-Kirigami.Dialog {
+ThemedDialog {
     id: dialog
 
     readonly property var setup: App.accountSetup

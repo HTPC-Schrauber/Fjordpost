@@ -2,6 +2,7 @@
 
 #include "core/accountmanager.h"
 #include "integration/accountsetup.h"
+#include "integration/colorscheme.h"
 #include "mail/mailservice.h"
 #include "mail/mime/messagebuilder.h"
 #include "mail/mime/messageparser.h"
@@ -428,6 +429,11 @@ void AppController::setReaderColors(const QString &background, const QString &te
         loadCurrent(id);
 }
 
+void AppController::applyColorScheme(const QVariantMap &colors)
+{
+    ColorScheme::apply(colors);
+}
+
 int AppController::messageCountFrom(const QString &email) const
 {
     QSqlQuery q(Database::connection());
@@ -502,8 +508,10 @@ void AppController::toggleFlagged(qint64 messageId)
 void AppController::moveToRole(qint64 messageId, const QString &role)
 {
     const MessageLocation loc = MailStore::location(messageId);
-    const qint64 target = MailStore::folderIdForRole(loc.accountId, role);
-    if (loc.id == 0 || target == 0 || target == loc.folderId) {
+    if (loc.id == 0)
+        return;
+    const qint64 target = MailStore::ensureFolderForRole(loc.accountId, role);
+    if (target == 0 || target == loc.folderId) {
         if (target == 0)
             Q_EMIT notify(i18n("This account has no folder for this action."));
         return;
@@ -526,12 +534,11 @@ void AppController::deleteMessage(qint64 messageId)
     const MessageLocation loc = MailStore::location(messageId);
     if (loc.id == 0)
         return;
-    const qint64 trash = MailStore::folderIdForRole(loc.accountId, QString::fromLatin1(FolderRole::Trash));
-    if (trash != 0 && loc.folderId != trash) {
+    if (loc.folderRole != QLatin1String(FolderRole::Trash)) {
         moveToRole(messageId, QString::fromLatin1(FolderRole::Trash));
         return;
     }
-    // Im Papierkorb (oder ohne Papierkorb): endgültig löschen.
+    // Im Papierkorb: endgültig löschen.
     if (loc.uid > 0) {
         MailStore::enqueueOp(loc.accountId, QStringLiteral("expunge"), loc.folderPath, loc.uid);
         m_mail->flushPendingOps(loc.accountId);

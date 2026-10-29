@@ -39,7 +39,7 @@ struct MessageLocation {
 struct PendingOp {
     qint64 id = 0;
     qint64 accountId = 0;
-    QString op; // "flags", "move", "expunge"
+    QString op; // "flags", "move", "expunge", "create"
     QString folderPath;
     qint64 uid = 0;
     QString argument;
@@ -56,6 +56,12 @@ QList<FolderState> folders(qint64 accountId);
 FolderState folder(qint64 folderId);
 qint64 folderIdForRole(qint64 accountId, const QString &role);
 qint64 folderIdForPath(qint64 accountId, const QString &path);
+// Liefert den Ordner für eine Rolle (Gesendet, Entwürfe, Papierkorb, Archiv). Fehlt er,
+// wird er lokal angelegt und eine "create"-Operation für den Server eingereiht.
+qint64 ensureFolderForRole(qint64 accountId, const QString &role);
+// Pfade, deren Anlage auf dem Server noch aussteht (dürfen beim Abgleich nicht verschwinden).
+QStringList pendingFolderCreations(qint64 accountId);
+int roleSortOrder(const QString &role);
 void saveFolderState(const FolderState &state);
 void clearFolder(qint64 folderId);
 

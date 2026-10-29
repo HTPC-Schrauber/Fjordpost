@@ -3,7 +3,10 @@
 #include "database.h"
 #include "messageflags.h"
 
+#include <algorithm>
+
 #include <QDateTime>
+#include <QHash>
 #include <QLoggingCategory>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -145,6 +148,76 @@ qint64 folderIdForPath(qint64 accountId, const QString &path)
     q.addBindValue(accountId);
     q.addBindValue(path);
     return exec(q) && q.next() ? q.value(0).toLongLong() : 0;
+}
+
+int roleSortOrder(const QString &role)
+{
+    static const QStringList order = {
+        QString::fromLatin1(FolderRole::Inbox),
+        QString::fromLatin1(FolderRole::Drafts),
+        QString::fromLatin1(FolderRole::Sent),
+        QString::fromLatin1(FolderRole::Archive),
+        QString::fromLatin1(FolderRole::Junk),
+        QString::fromLatin1(FolderRole::Trash),
+    };
+    const int idx = order.indexOf(role);
+    return idx >= 0 ? idx : 10;
+}
+
+qint64 ensureFolderForRole(qint64 accountId, const QString &role)
+{
+    if (const qint64 id = folderIdForRole(accountId, role))
+        return id;
+
+    static const QHash<QString, QString> names = {
+        {QString::fromLatin1(FolderRole::Drafts), QStringLiteral("Drafts")},
+        {QString::fromLatin1(FolderRole::Sent), QStringLiteral("Sent")},
+        {QString::fromLatin1(FolderRole::Trash), QStringLiteral("Trash")},
+        {QString::fromLatin1(FolderRole::Archive), QStringLiteral("Archive")},
+    };
+    const QString name = names.value(role);
+    if (name.isEmpty())
+        return 0;
+
+    // Trennzeichen und Namensraum vom Posteingang übernehmen: Server wie Courier
+    // erlauben Ordner nur unterhalb von "INBOX.".
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT path, delimiter FROM folders WHERE account_id = ?"));
+    q.addBindValue(accountId);
+    exec(q);
+    QString delimiter = QStringLiteral("/");
+    QStringList others;
+    while (q.next()) {
+        const QString path = q.value(0).toString();
+        if (path.compare(QLatin1String("INBOX"), Qt::CaseInsensitive) == 0) {
+            if (!q.value(1).toString().isEmpty())
+                delimiter = q.value(1).toString();
+        } else {
+            others << path;
+        }
+    }
+    const QString prefix = QStringLiteral("INBOX") + delimiter;
+    const bool belowInbox = !others.isEmpty() && std::all_of(others.cbegin(), others.cend(), [&prefix](const QString &p) {
+        return p.startsWith(prefix, Qt::CaseInsensitive);
+    });
+    const QString path = belowInbox ? prefix + name : name;
+
+    const qint64 id = upsertFolder(accountId, path, name, role, delimiter, roleSortOrder(role));
+    if (id > 0)
+        enqueueOp(accountId, QStringLiteral("create"), path, 0);
+    return id;
+}
+
+QStringList pendingFolderCreations(qint64 accountId)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT folder_path FROM pending_ops WHERE account_id = ? AND op = 'create'"));
+    q.addBindValue(accountId);
+    exec(q);
+    QStringList paths;
+    while (q.next())
+        paths << q.value(0).toString();
+    return paths;
 }
 
 void saveFolderState(const FolderState &state)

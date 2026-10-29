@@ -22,6 +22,9 @@ build/bin/mopmail --demo --offline --data-dir /tmp/mopmail-demo
 - Der Build muss ohne Compiler-Warnungen durchlaufen (ECM-Warnflags sind aktiv).
 - Testserver: `sudo docker compose -f dev/docker-compose.yml up -d` (GreenMail,
   Konten `max@mopmail.test`/`anna@mopmail.test`, Passwort `geheim`; IMAP 3143, SMTP 3025).
+  Integrationstest dagegen: `MOPMAIL_TEST_SERVER=127.0.0.1 build/bin/servertest`
+  (ohne die Variable wird er übersprungen). GreenMail akzeptiert jedes Passwort und hat
+  anfangs nur `INBOX`.
 
 ### Entwickleroptionen von `mopmail`
 
@@ -30,8 +33,8 @@ build/bin/mopmail --demo --offline --data-dir /tmp/mopmail-demo
 | `--demo` | leere Datenbank mit Beispielkonten/-mails füllen |
 | `--offline` | keine Serververbindungen |
 | `--data-dir <dir>` | eigenes Datenverzeichnis (echte Daten nie für Tests nutzen) |
-| `--screenshot <png>` | Fenster nach 3 s als Bild speichern und beenden |
-| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `setup`, `light` |
+| `--screenshot <png>` | Fenster nach 3 s als Bild speichern und beenden (startet auch neben laufender Instanz) |
+| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light` |
 
 Oberflächenänderungen immer per `--screenshot` prüfen und die Konsolenausgabe auf
 QML-Warnungen kontrollieren. Achtung: `--dev-action light` speichert den hellen Modus in
@@ -46,7 +49,8 @@ src/
                 messageflags.h (Flag-Bitmaske, Ordnerrollen), demodata
   mail/
     imap/       ImapConnection (Login + serielle Task-Queue), ImapAccount (Sync, IDLE, Offline-Ops)
-    smtp/       SmtpSender (KSMTP)
+    net/        LineSocket (zeilenweise TCP/TLS-Verbindung für SMTP, später POP3)
+    smtp/       SmtpSender (eigener SMTP-Client: STARTTLS, AUTH PLAIN/LOGIN/XOAUTH2)
     mime/       MessageParser / MessageBuilder (KMime)
     autoconfig/ AutoConfig (Anbieter-XML, .well-known, ISPDB, MX, Raten)
     mailservice MailService: koordiniert alle Konten, Postausgang
@@ -90,10 +94,21 @@ Grundprinzipien:
   überall vorhanden. Erwartete Befehle im FakeServer-Test exakt so, wie KIMAP sie sendet.
 - **QML-Eigenschaften dürfen nicht mit `on` + Großbuchstabe beginnen** (`onAccent` wird als
   Signal-Handler interpretiert).
+- **Keine QML-Eigenschaft `data` in eigenen Items** – sie überdeckt die Standard-Eigenschaft
+  für Kindelemente, das Item bleibt leer (Composer heißt deshalb `draft`).
+- **Dialoge/Popups:** Kirigami setzt dort das Farbschema bewusst zurück; Overrides am Fenster
+  wirken nicht. Die Farben kommen über ein generiertes KDE-Farbschema
+  (`integration/colorscheme.cpp`, aufgerufen aus `Main.qml`), Dialoge erben von
+  `components/ThemedDialog.qml`.
 - `Kirigami.Avatar` gibt es in KF6 nicht mehr → `org.kde.kirigamiaddons.components` oder
   `components/InitialsAvatar.qml`.
 - Unicode-Property-Escapes (`\p{L}`) in QML-JavaScript funktionieren nicht.
 - `toString()`-Überladungen für eigene Enums kollidieren mit `QCOMPARE` (ADL) → eindeutige Namen.
+- **KSMTP wird nicht verwendet:** wertet auf mehrere TCP-Pakete verteilte Antwortzeilen
+  falsch aus (GreenMail) und braucht Cyrus-SASL-Plugins. Eigener Client in `mail/smtp`.
+- Fehlende Standardordner (Gesendet, Entwürfe, Papierkorb, Archiv) legt
+  `MailStore::ensureFolderForRole()` lokal an und reiht eine `create`-Operation ein –
+  nie `folderIdForRole()` für Ziele von Verschieben/Ablegen verwenden.
 - Das Breeze-Icon-Theme unter WSL (5.116) ist älter; Icon-Namen vor Verwendung prüfen
   (`find /usr/share/icons/breeze -name '<name>.svg'`).
 
@@ -105,6 +120,10 @@ Die Oberfläche folgt dem Entwurf `mopmail_ui.html` des Projektinhabers:
 - Die KWin-Fensterleiste bleibt; Logo, Suche (`Strg+K`) und Sync-Status stehen in der
   Kopfleiste im Fenster. Keine nachgebauten Fensterknöpfe.
 - Breeze-Icons und Systemschrift statt Lucide/Inter (KDE-Integration).
+- Einstellungen: Darstellung in `Theme.settings`, übrige in `Prefs` (`qml/Prefs.qml`, QtCore
+  `Settings`, Datei `~/.config/kde.org/mopmail.conf`). Der Composer öffnet je nach
+  `Prefs.compose.openIn` im Hauptfenster (`ComposerForm` statt Lesebereich) oder als
+  `ComposerWindow`.
 - Funktionen ohne Backend werden als ehrliche Platzhalter gezeigt, nie mit erfundenen Daten.
 
 ## Meilensteine
@@ -112,7 +131,7 @@ Die Oberfläche folgt dem Entwurf `mopmail_ui.html` des Projektinhabers:
 | | Inhalt | Stand |
 |---|---|---|
 | M0 | Grundgerüst, DB, Oberfläche mit Demo-Daten | fertig |
-| M1 | IMAP + SMTP, Kontoeinrichtung, Lesen/Schreiben, Design-Umbau | Code fertig, Test gegen echten Server offen |
+| M1 | IMAP + SMTP, Kontoeinrichtung, Lesen/Schreiben, Design-Umbau | fertig, Servertest grün; manueller Oberflächentest offen |
 | M2 | POP3, Threading, Snooze, Labels, Filterregeln, Signaturen, Senden rückgängig, Import/Export | geplant |
 | M3 | CardDAV/CalDAV, Kalender, Kontakte, Aufgaben, Einladungen | geplant |
 | M4 | Google OAuth2 (Gmail, Kontakte, Kalender) | geplant |

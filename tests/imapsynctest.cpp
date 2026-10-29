@@ -126,7 +126,10 @@ private Q_SLOTS:
                  << "S: * 0 EXISTS"
                  << "S: * OK [UIDVALIDITY 7] ok"
                  << "S: * OK [UIDNEXT 1] ok"
-                 << "S: A000013 OK [READ-WRITE] done";
+                 << "S: A000013 OK [READ-WRITE] done"
+                 // Abmelden beim Beenden
+                 << "C: A000014 LOGOUT"
+                 << "S: A000014 OK bye";
 
         FakeServer server;
         server.setScenario(scenario);
@@ -174,6 +177,7 @@ private Q_SLOTS:
         QVERIFY(MailStore::location(local.value(3).id).bodyFetched);
 
         imap.shutdown();
+        QTRY_VERIFY_WITH_TIMEOUT(server.isAllScenarioDone(), 5000);
         server.quit();
     }
 
