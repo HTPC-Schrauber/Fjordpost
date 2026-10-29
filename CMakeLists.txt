@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(mopmail VERSION 0.1.0 LANGUAGES CXX)
+project(fjordpost VERSION 0.1.0 LANGUAGES CXX)
 
 set(QT_MIN_VERSION 6.6.0)
 set(KF_MIN_VERSION 6.0.0)
@@ -19,8 +19,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ecm_setup_version(${PROJECT_VERSION}
-    VARIABLE_PREFIX MOPMAIL
-    VERSION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/mopmail-version.h")
+    VARIABLE_PREFIX FJORDPOST
+    VERSION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/fjordpost-version.h")
 
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Sql Network Widgets DBus WebEngineQuick Test)
 find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS CoreAddons I18n Config ColorScheme DBusAddons Crash Kirigami Notifications StatusNotifierItem)
@@ -36,7 +36,7 @@ if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-install(FILES data/org.mopmail.MopMail.desktop DESTINATION ${KDE_INSTALL_APPDIR})
-install(FILES data/mopmail.notifyrc DESTINATION ${KDE_INSTALL_KNOTIFYRCDIR})
+install(FILES data/de.fjordblau.Fjordpost.desktop DESTINATION ${KDE_INSTALL_APPDIR})
+install(FILES data/fjordpost.notifyrc DESTINATION ${KDE_INSTALL_KNOTIFYRCDIR})
 
 feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES)

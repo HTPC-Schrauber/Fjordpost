@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls as QQC2
-import org.mopmail.app
+import de.fjordblau.fjordpost.app
 
 // Überschrift in Großbuchstaben (POSTFACH, LABELS & FILTER, ...).
 QQC2.Label {

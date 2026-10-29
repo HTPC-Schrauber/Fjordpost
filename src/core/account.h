@@ -4,7 +4,7 @@
 #include <QMetaType>
 #include <QString>
 
-namespace MopMail {
+namespace Fjordpost {
 
 enum class AccountType { Imap, Pop3 };
 enum class Security { None, StartTls, Tls };
@@ -45,6 +45,6 @@ AccountType accountTypeFromString(const QString &s);
 Security securityFromString(const QString &s);
 AuthMethod authMethodFromString(const QString &s);
 
-} // namespace MopMail
+} // namespace Fjordpost
 
-Q_DECLARE_METATYPE(MopMail::Account)
+Q_DECLARE_METATYPE(Fjordpost::Account)

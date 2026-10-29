@@ -6,7 +6,7 @@
 #include <QTest>
 #include <QTimer>
 
-using namespace MopMail;
+using namespace Fjordpost;
 
 namespace {
 
@@ -121,7 +121,7 @@ class SmtpTest : public QObject
 private Q_SLOTS:
     void initTestCase()
     {
-        KLocalizedString::setApplicationDomain("mopmail");
+        KLocalizedString::setApplicationDomain("fjordpost");
     }
 
     void sendWithPlainAuth()

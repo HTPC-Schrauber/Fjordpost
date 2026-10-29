@@ -1,6 +1,6 @@
 #include "account.h"
 
-namespace MopMail {
+namespace Fjordpost {
 
 QString accountTypeToString(AccountType t)
 {
@@ -44,4 +44,4 @@ AuthMethod authMethodFromString(const QString &s)
     return s == QLatin1String("oauth2") ? AuthMethod::OAuth2 : AuthMethod::Password;
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

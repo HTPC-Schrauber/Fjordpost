@@ -10,14 +10,14 @@
 #include <QDBusMessage>
 #include <QSqlQuery>
 
-namespace MopMail {
+namespace Fjordpost {
 
 Notifier::Notifier(QObject *parent)
     : QObject(parent)
-    , m_tray(new KStatusNotifierItem(QStringLiteral("mopmail"), this))
+    , m_tray(new KStatusNotifierItem(QStringLiteral("fjordpost"), this))
 {
     m_tray->setCategory(KStatusNotifierItem::Communications);
-    m_tray->setTitle(QStringLiteral("MopMail"));
+    m_tray->setTitle(QStringLiteral("Fjordpost"));
     m_tray->setIconByName(QStringLiteral("mail-client"));
     m_tray->setStandardActionsEnabled(true);
     // Fenster selbst ein-/ausblenden statt der Standard-Logik von KStatusNotifierItem
@@ -33,7 +33,7 @@ void Notifier::setUnreadCount(int count)
     m_unread = count;
     m_tray->setStatus(count > 0 ? KStatusNotifierItem::Active : KStatusNotifierItem::Passive);
     m_tray->setIconByName(count > 0 ? QStringLiteral("mail-unread-new") : QStringLiteral("mail-client"));
-    m_tray->setToolTip(QStringLiteral("mail-client"), QStringLiteral("MopMail"),
+    m_tray->setToolTip(QStringLiteral("mail-client"), QStringLiteral("Fjordpost"),
                        count > 0 ? i18np("%1 unread message", "%1 unread messages", count) : i18n("No unread messages"));
     updateLauncherBadge(count);
 }
@@ -41,9 +41,9 @@ void Notifier::setUnreadCount(int count)
 void Notifier::updateLauncherBadge(int count)
 {
     // Unity-LauncherEntry-Protokoll, das auch die Plasma-Taskleiste versteht.
-    QDBusMessage signal = QDBusMessage::createSignal(QStringLiteral("/org/mopmail/MopMail"), QStringLiteral("com.canonical.Unity.LauncherEntry"),
+    QDBusMessage signal = QDBusMessage::createSignal(QStringLiteral("/de/fjordblau/Fjordpost"), QStringLiteral("com.canonical.Unity.LauncherEntry"),
                                                      QStringLiteral("Update"));
-    signal << QStringLiteral("application://org.mopmail.MopMail.desktop");
+    signal << QStringLiteral("application://de.fjordblau.Fjordpost.desktop");
     signal << QVariantMap{{QStringLiteral("count"), qint64(count)}, {QStringLiteral("count-visible"), count > 0}};
     QDBusConnection::sessionBus().send(signal);
 }
@@ -82,4 +82,4 @@ void Notifier::notifyNewMessages(const QList<qint64> &messageIds)
     notification->sendEvent();
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

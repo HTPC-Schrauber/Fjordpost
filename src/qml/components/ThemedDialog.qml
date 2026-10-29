@@ -1,8 +1,8 @@
 import QtQuick
 import org.kde.kirigami as Kirigami
-import org.mopmail.app
+import de.fjordblau.fjordpost.app
 
-// Kirigami-Dialog in den MopMail-Farben. Dialoge liegen im Overlay des Fensters
+// Kirigami-Dialog in den Fjordpost-Farben. Dialoge liegen im Overlay des Fensters
 // und erben dessen Kirigami.Theme-Überschreibungen nicht.
 Kirigami.Dialog {
     Kirigami.Theme.inherit: false

@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
-import org.mopmail.app
+import de.fjordblau.fjordpost.app
 
 // Unaufdringliche Meldung unten rechts.
 Rectangle {

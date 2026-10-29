@@ -1,6 +1,6 @@
 # AGENTS.md – Hinweise für KI-Agenten und Mitwirkende
 
-MopMail ist ein E-Mail-Client für KDE Plasma im Stil von Mailbird.
+Fjordpost ist ein E-Mail-Client für KDE Plasma im Stil von Mailbird.
 C++20 · Qt 6 · KDE Frameworks 6 · Kirigami/QML · eigene SQLite-Engine (kein Akonadi).
 
 Kommunikation mit dem Projektinhaber, Commit-Nachrichten und Code-Kommentare auf **Deutsch**.
@@ -13,7 +13,7 @@ sudo dev/install-deps-debian.sh            # Abhängigkeiten (Debian 13), brauch
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
 ctest --test-dir build --output-on-failure
-build/bin/mopmail --demo --offline --data-dir /tmp/mopmail-demo
+build/bin/fjordpost --demo --offline --data-dir /tmp/fjordpost-demo
 ```
 
 - Entwicklung unter WSL2 (Debian 13, WSLg), Tests später auf CachyOS + Plasma.
@@ -21,12 +21,12 @@ build/bin/mopmail --demo --offline --data-dir /tmp/mopmail-demo
   (im Claude-Code-Prompt mit `! <befehl>`).
 - Der Build muss ohne Compiler-Warnungen durchlaufen (ECM-Warnflags sind aktiv).
 - Testserver: `sudo docker compose -f dev/docker-compose.yml up -d` (GreenMail,
-  Konten `max@mopmail.test`/`anna@mopmail.test`, Passwort `geheim`; IMAP 3143, SMTP 3025).
-  Integrationstest dagegen: `MOPMAIL_TEST_SERVER=127.0.0.1 build/bin/servertest`
+  Konten `max@fjordpost.test`/`anna@fjordpost.test`, Passwort `geheim`; IMAP 3143, SMTP 3025).
+  Integrationstest dagegen: `FJORDPOST_TEST_SERVER=127.0.0.1 build/bin/servertest`
   (ohne die Variable wird er übersprungen). GreenMail akzeptiert jedes Passwort und hat
   anfangs nur `INBOX`.
 
-### Entwickleroptionen von `mopmail`
+### Entwickleroptionen von `fjordpost`
 
 | Option | Zweck |
 |---|---|
@@ -38,7 +38,7 @@ build/bin/mopmail --demo --offline --data-dir /tmp/mopmail-demo
 
 Oberflächenänderungen immer per `--screenshot` prüfen und die Konsolenausgabe auf
 QML-Warnungen kontrollieren. Achtung: `--dev-action light` speichert den hellen Modus in
-`~/.config/kde.org/mopmail.conf` – danach wieder `dark=true` setzen.
+`~/.config/fjordblau.de/fjordpost.conf` – danach wieder `dark=true` setzen.
 
 ## Architektur
 
@@ -71,15 +71,15 @@ Grundprinzipien:
 - **Roh-Mails** liegen im BlobStore, die DB enthält Metadaten, Vorschau und Volltext (FTS5).
 - **DB-Schema** nur über neue Einträge in `migrations[]` (`storage/database.cpp`) ändern,
   bestehende Migrationen nie anfassen. Jeder Thread nutzt `Database::connection()`.
-- **QML ↔ C++** nur über den Singleton `App` (`org.mopmail.core`) und dessen Modelle.
+- **QML ↔ C++** nur über den Singleton `App` (`de.fjordblau.fjordpost.core`) und dessen Modelle.
 - **Passwörter/Tokens** nur über `SecretStore`, nie in DB oder Konfiguration.
 
 ## Code-Konventionen
 
 - Stil wie der umgebende Code: KDE/Qt-Idiome, `QStringLiteral`, `Q_SIGNALS`/`Q_EMIT`
   (`QT_NO_KEYWORDS`), kein `Q_FOREACH`, `std::as_const`, Logging über `Q_LOGGING_CATEGORY`
-  (`mopmail.*`).
-- Neue `.cpp` in `src/CMakeLists.txt` (Bibliothek `mopmailcore`), neue QML-Dateien in
+  (`fjordpost.*`).
+- Neue `.cpp` in `src/CMakeLists.txt` (Bibliothek `fjordpostcore`), neue QML-Dateien in
   `ecm_target_qml_sources` eintragen (Komponenten mit `PATH components`).
 - Kommentare sparsam und auf Deutsch; sie erklären das *Warum*.
 
@@ -121,7 +121,7 @@ Die Oberfläche folgt dem Entwurf `mopmail_ui.html` des Projektinhabers:
   Kopfleiste im Fenster. Keine nachgebauten Fensterknöpfe.
 - Breeze-Icons und Systemschrift statt Lucide/Inter (KDE-Integration).
 - Einstellungen: Darstellung in `Theme.settings`, übrige in `Prefs` (`qml/Prefs.qml`, QtCore
-  `Settings`, Datei `~/.config/kde.org/mopmail.conf`). Der Composer öffnet je nach
+  `Settings`, Datei `~/.config/fjordblau.de/fjordpost.conf`). Der Composer öffnet je nach
   `Prefs.compose.openIn` im Hauptfenster (`ComposerForm` statt Lesebereich) oder als
   `ComposerWindow`.
 - Funktionen ohne Backend werden als ehrliche Platzhalter gezeigt, nie mit erfundenen Daten.

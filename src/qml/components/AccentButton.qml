@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.mopmail.app
+import de.fjordblau.fjordpost.app
 
 // Primäre Schaltfläche in Akzentfarbe (Neue E-Mail, Senden).
 QQC2.AbstractButton {

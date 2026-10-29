@@ -5,7 +5,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtWebEngine
 import org.kde.kirigami as Kirigami
-import org.mopmail.core
+import de.fjordblau.fjordpost.core
 import "components"
 
 // Lesebereich: Aktionsleiste, Betreff, Absenderkarte, Inhalt, Anhänge, Schnellantwort.

@@ -7,7 +7,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-using namespace MopMail;
+using namespace Fjordpost;
 
 class MessageListModelTest : public QObject
 {

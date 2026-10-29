@@ -5,7 +5,7 @@
 #include <QObject>
 #include <functional>
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Versendet eine fertige Nachricht über den SMTP-Server eines Kontos.
 // Pro Versand eine eigene Verbindung (SMTP-Sitzungen sind kurzlebig).
@@ -23,4 +23,4 @@ public:
     void testLogin(const Account &account, const QString &secret, Callback callback);
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

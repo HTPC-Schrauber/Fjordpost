@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
-import org.mopmail.app
+import de.fjordblau.fjordpost.app
 
 // Flache, abgerundete Symbolschaltfläche (Toolbar, Kopfbereiche).
 QQC2.AbstractButton {

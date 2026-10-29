@@ -1,5 +1,5 @@
 # Kernbibliothek: alles außer main(), damit Tests sie linken können.
-add_library(mopmailcore STATIC
+add_library(fjordpostcore STATIC
     core/account.cpp
     core/accountmanager.cpp
     core/secretstore.cpp
@@ -23,19 +23,19 @@ add_library(mopmailcore STATIC
     integration/colorscheme.cpp
     integration/notifier.cpp
 )
-target_include_directories(mopmailcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
-target_link_libraries(mopmailcore PUBLIC
+target_include_directories(fjordpostcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+target_link_libraries(fjordpostcore PUBLIC
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Sql Qt6::Network Qt6::DBus
     KF6::CoreAddons KF6::I18n KF6::ConfigCore KF6::ColorScheme KF6::Notifications KF6::StatusNotifierItem
     Qt6Keychain::Qt6Keychain
     KPim6::Mime KPim6::IMAP
 )
 
-add_executable(mopmail main.cpp integration/remotecontentblocker.cpp)
+add_executable(fjordpost main.cpp integration/remotecontentblocker.cpp)
 
-ecm_add_qml_module(mopmail URI org.mopmail.app GENERATE_PLUGIN_SOURCE)
+ecm_add_qml_module(fjordpost URI de.fjordblau.fjordpost.app GENERATE_PLUGIN_SOURCE)
 set_source_files_properties(qml/Theme.qml qml/Prefs.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
-ecm_target_qml_sources(mopmail SOURCES
+ecm_target_qml_sources(fjordpost SOURCES
     qml/Theme.qml
     qml/Prefs.qml
     qml/HeaderBar.qml
@@ -52,7 +52,7 @@ ecm_target_qml_sources(mopmail SOURCES
     qml/SettingsDialog.qml
     qml/AccountSetupDialog.qml
 )
-ecm_target_qml_sources(mopmail PATH components SOURCES
+ecm_target_qml_sources(fjordpost PATH components SOURCES
     qml/components/AccentButton.qml
     qml/components/IconButton.qml
     qml/components/InitialsAvatar.qml
@@ -65,10 +65,10 @@ ecm_target_qml_sources(mopmail PATH components SOURCES
     qml/components/Toast.qml
 )
 
-target_link_libraries(mopmail PRIVATE
-    mopmailcore
+target_link_libraries(fjordpost PRIVATE
+    fjordpostcore
     Qt6::Quick Qt6::QuickControls2 Qt6::Widgets Qt6::WebEngineQuick
     KF6::DBusAddons KF6::Crash KF6::I18nQml
 )
 
-install(TARGETS mopmail ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})
+install(TARGETS fjordpost ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})

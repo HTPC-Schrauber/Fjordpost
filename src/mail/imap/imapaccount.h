@@ -12,7 +12,7 @@ class Session;
 class IdleJob;
 }
 
-namespace MopMail {
+namespace Fjordpost {
 
 class ImapConnection;
 
@@ -84,4 +84,4 @@ private:
     bool m_shuttingDown = false;
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

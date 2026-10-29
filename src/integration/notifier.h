@@ -6,7 +6,7 @@
 
 class KStatusNotifierItem;
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Desktop-Integration für neue Nachrichten: Benachrichtigungen,
 // Tray-Symbol und Zähler am Programmsymbol in der Plasma-Taskleiste.
@@ -30,4 +30,4 @@ private:
     int m_unread = -1;
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

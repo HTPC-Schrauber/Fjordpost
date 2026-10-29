@@ -7,9 +7,9 @@
 
 #include <QLoggingCategory>
 
-Q_LOGGING_CATEGORY(lcImap, "mopmail.imap")
+Q_LOGGING_CATEGORY(lcImap, "fjordpost.imap")
 
-namespace MopMail {
+namespace Fjordpost {
 
 namespace {
 
@@ -176,4 +176,4 @@ void ImapConnection::disconnectFromServer()
     m_running = false;
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

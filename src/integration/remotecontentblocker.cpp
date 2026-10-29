@@ -1,6 +1,6 @@
 #include "remotecontentblocker.h"
 
-namespace MopMail {
+namespace Fjordpost {
 
 void RemoteContentBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
 {
@@ -11,4 +11,4 @@ void RemoteContentBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
         info.block(true);
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

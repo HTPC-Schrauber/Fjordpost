@@ -2,20 +2,20 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.mopmail.core
+import de.fjordblau.fjordpost.core
 import "components"
 
 Kirigami.AbstractApplicationWindow {
     id: root
 
-    title: App.totalUnread > 0 ? i18nc("@title:window", "MopMail (%1 unread)", App.totalUnread) : "MopMail"
+    title: App.totalUnread > 0 ? i18nc("@title:window", "Fjordpost (%1 unread)", App.totalUnread) : "Fjordpost"
     width: 1500
     height: 900
     minimumWidth: 1000
     minimumHeight: 560
     color: Theme.reading
 
-    // Bedienelemente (Dialoge, Eingabefelder) an das MopMail-Theme anpassen
+    // Bedienelemente (Dialoge, Eingabefelder) an das Fjordpost-Theme anpassen
     Kirigami.Theme.inherit: false
     Kirigami.Theme.colorSet: Kirigami.Theme.View
     Kirigami.Theme.backgroundColor: Theme.reading

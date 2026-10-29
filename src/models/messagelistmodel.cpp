@@ -11,9 +11,9 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-Q_LOGGING_CATEGORY(lcMessageList, "mopmail.messagelist")
+Q_LOGGING_CATEGORY(lcMessageList, "fjordpost.messagelist")
 
-namespace MopMail {
+namespace Fjordpost {
 
 namespace {
 constexpr int pageSize = 200;
@@ -325,4 +325,4 @@ void MessageListModel::removeMessage(qint64 messageId)
     Q_EMIT countChanged();
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

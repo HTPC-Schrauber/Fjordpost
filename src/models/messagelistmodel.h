@@ -4,7 +4,7 @@
 #include <QColor>
 #include <QDateTime>
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Nachrichtenliste für einen Ordner, einen Sammelordner (Rolle über alle
 // bzw. ein Konto) oder eine Volltextsuche. Lädt seitenweise nach (fetchMore).
@@ -90,4 +90,4 @@ private:
     bool m_hasMore = false;
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

@@ -4,7 +4,7 @@
 
 #include <QObject>
 
-namespace MopMail {
+namespace Fjordpost {
 
 class AccountManager;
 class SecretStore;
@@ -95,4 +95,4 @@ private:
     int m_outgoingSecurity = 2;
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

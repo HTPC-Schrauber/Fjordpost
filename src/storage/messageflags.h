@@ -2,7 +2,7 @@
 
 #include <QtGlobal>
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Bitmaske für messages.flags (angelehnt an die IMAP-Systemflags).
 namespace MessageFlag {
@@ -27,4 +27,4 @@ inline constexpr auto Archive = "archive";
 inline constexpr auto Flagged = "flagged"; // nur virtuell (Unified-Ansicht)
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

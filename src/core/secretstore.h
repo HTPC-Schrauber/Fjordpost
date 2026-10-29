@@ -3,7 +3,7 @@
 #include <QObject>
 #include <functional>
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Asynchroner Zugriff auf Passwörter und OAuth-Tokens über QtKeychain.
 // Unter KDE landet alles in KWallet, sonst im Secret Service.
@@ -24,4 +24,4 @@ private:
     static QString serviceName();
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

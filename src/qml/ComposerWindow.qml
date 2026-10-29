@@ -1,6 +1,6 @@
 import QtQuick
 import org.kde.kirigami as Kirigami
-import org.mopmail.core
+import de.fjordblau.fjordpost.core
 
 // Eigenes Fenster für den Composer (Einstellung "In separatem Fenster" oder herausgelöst).
 Kirigami.AbstractApplicationWindow {

@@ -6,7 +6,7 @@
 #include <KLocalizedString>
 #include <QSqlQuery>
 
-namespace MopMail {
+namespace Fjordpost {
 
 QString iconForFolderRole(const QString &role)
 {
@@ -129,4 +129,4 @@ QHash<int, QByteArray> FolderModel::roleNames() const
     };
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

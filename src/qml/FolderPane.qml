@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.mopmail.core
+import de.fjordblau.fjordpost.core
 import "components"
 
 // Ordnerspalte: Kontotitel, "Neue E-Mail", Ordner, Status und Cache.

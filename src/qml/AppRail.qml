@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.mopmail.core
+import de.fjordblau.fjordpost.core
 import "components"
 
 // Schmale Leiste ganz links: Konten, Module, Darstellung, Einstellungen.
@@ -42,7 +42,7 @@ Rectangle {
             }
             QQC2.Label {
                 anchors.centerIn: parent
-                text: "M"
+                text: "F"
                 color: "white"
                 font.weight: Font.ExtraBold
                 font.pointSize: Theme.fontSm

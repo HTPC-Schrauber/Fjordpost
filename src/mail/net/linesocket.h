@@ -8,7 +8,7 @@
 
 class QSslSocket;
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Zeilenorientierte TCP/TLS-Verbindung für textbasierte Protokolle (SMTP, POP3).
 // Antworten werden gepuffert und nur als vollständige Zeilen gemeldet: Server
@@ -49,4 +49,4 @@ private:
     bool m_failed = false;
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

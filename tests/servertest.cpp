@@ -1,7 +1,7 @@
 // Integrationstest gegen einen echten Mailserver (GreenMail aus dev/docker-compose.yml).
 // GreenMail akzeptiert jedes Passwort; Anmeldefehler testen smtptest/imapsynctest.
-// Läuft nur, wenn MOPMAIL_TEST_SERVER gesetzt ist, z. B.:
-//   MOPMAIL_TEST_SERVER=127.0.0.1 ctest --test-dir build -R servertest --output-on-failure
+// Läuft nur, wenn FJORDPOST_TEST_SERVER gesetzt ist, z. B.:
+//   FJORDPOST_TEST_SERVER=127.0.0.1 ctest --test-dir build -R servertest --output-on-failure
 
 #include "core/accountmanager.h"
 #include "mail/imap/imapaccount.h"
@@ -21,7 +21,7 @@
 #include <QTest>
 #include <QUuid>
 
-using namespace MopMail;
+using namespace Fjordpost;
 
 namespace {
 
@@ -47,19 +47,19 @@ class ServerTest : public QObject
 private Q_SLOTS:
     void initTestCase()
     {
-        m_host = qEnvironmentVariable("MOPMAIL_TEST_SERVER");
+        m_host = qEnvironmentVariable("FJORDPOST_TEST_SERVER");
         if (m_host.isEmpty())
-            QSKIP("MOPMAIL_TEST_SERVER nicht gesetzt (Testserver: dev/docker-compose.yml)");
+            QSKIP("FJORDPOST_TEST_SERVER nicht gesetzt (Testserver: dev/docker-compose.yml)");
 
-        KLocalizedString::setApplicationDomain("mopmail");
+        KLocalizedString::setApplicationDomain("fjordpost");
         QVERIFY(m_dir.isValid());
         qputenv("XDG_DATA_HOME", m_dir.filePath(QStringLiteral("data")).toUtf8());
         QVERIFY(Database::initialize(m_dir.filePath(QStringLiteral("test.db"))));
 
-        m_max = makeAccount(QStringLiteral("Max"), QStringLiteral("max@mopmail.test"));
-        m_anna = makeAccount(QStringLiteral("Anna"), QStringLiteral("anna@mopmail.test"));
+        m_max = makeAccount(QStringLiteral("Max"), QStringLiteral("max@fjordpost.test"));
+        m_anna = makeAccount(QStringLiteral("Anna"), QStringLiteral("anna@fjordpost.test"));
         // Zweite, unabhängige Sicht auf Annas Postfach zum Prüfen des Serverzustands.
-        m_annaCheck = makeAccount(QStringLiteral("Anna (Kontrolle)"), QStringLiteral("anna@mopmail.test"));
+        m_annaCheck = makeAccount(QStringLiteral("Anna (Kontrolle)"), QStringLiteral("anna@fjordpost.test"));
         m_tag = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
     }
 
@@ -90,7 +90,7 @@ private Q_SLOTS:
         QVERIFY(blob.open(QIODevice::ReadOnly));
         const ParsedMessage parsed = MessageParser::parse(blob.readAll());
         QCOMPARE(parsed.subject, subject);
-        QCOMPARE(parsed.fromEmail, QStringLiteral("max@mopmail.test"));
+        QCOMPARE(parsed.fromEmail, QStringLiteral("max@fjordpost.test"));
         QVERIFY2(parsed.plainText.contains(QStringLiteral("schöne Grüße")), qPrintable(parsed.plainText));
         QVERIFY(!(loc.flags & MessageFlag::Seen));
         imap.shutdown();
@@ -198,7 +198,7 @@ private Q_SLOTS:
         OutgoingMessage m;
         m.fromName = QStringLiteral("Anna");
         m.fromEmail = m_anna.email;
-        m.to = {QStringLiteral("max@mopmail.test")};
+        m.to = {QStringLiteral("max@fjordpost.test")};
         m.subject = subject;
         m.plainText = QStringLiteral("Kopie für Gesendet");
         const QByteArray raw = MessageBuilder::build(m);
@@ -244,7 +244,7 @@ private:
         OutgoingMessage m;
         m.fromName = QStringLiteral("Max Mustermann");
         m.fromEmail = m_max.email;
-        m.to = {QStringLiteral("Anna <anna@mopmail.test>")};
+        m.to = {QStringLiteral("Anna <anna@fjordpost.test>")};
         m.subject = subject;
         m.plainText = text;
         const QByteArray raw = MessageBuilder::build(m);

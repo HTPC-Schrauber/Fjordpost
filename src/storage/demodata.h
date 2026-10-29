@@ -1,6 +1,6 @@
 #pragma once
 
-namespace MopMail {
+namespace Fjordpost {
 
 class AccountManager;
 
@@ -8,4 +8,4 @@ class AccountManager;
 // Oberfläche ohne echten Server entwickelt werden kann (Start mit --demo).
 void seedDemoData(AccountManager &accounts);
 
-} // namespace MopMail
+} // namespace Fjordpost

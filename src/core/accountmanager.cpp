@@ -6,9 +6,9 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-Q_LOGGING_CATEGORY(lcAccounts, "mopmail.accounts")
+Q_LOGGING_CATEGORY(lcAccounts, "fjordpost.accounts")
 
-namespace MopMail {
+namespace Fjordpost {
 
 namespace {
 
@@ -140,4 +140,4 @@ bool AccountManager::remove(qint64 id)
     return true;
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

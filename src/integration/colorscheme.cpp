@@ -10,7 +10,7 @@
 #include <QDir>
 #include <QStandardPaths>
 
-namespace MopMail::ColorScheme {
+namespace Fjordpost::ColorScheme {
 
 namespace {
 
@@ -49,12 +49,12 @@ void apply(const QVariantMap &colors)
 
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     QDir().mkpath(dir);
-    const QString path = QDir(dir).filePath(QStringLiteral("mopmail.colors"));
+    const QString path = QDir(dir).filePath(QStringLiteral("fjordpost.colors"));
 
     KSharedConfigPtr config = KSharedConfig::openConfig(path, KConfig::SimpleConfig);
     for (const QString &group : config->groupList())
         config->deleteGroup(group);
-    KConfigGroup(config, QStringLiteral("General")).writeEntry("Name", QStringLiteral("MopMail"));
+    KConfigGroup(config, QStringLiteral("General")).writeEntry("Name", QStringLiteral("Fjordpost"));
     // Inaktive Fenster nicht abdunkeln/entsättigen
     KConfigGroup(config, QStringLiteral("ColorEffects:Inactive")).writeEntry("Enable", false);
     KConfigGroup(config, QStringLiteral("ColorEffects:Inactive")).writeEntry("ChangeSelectionColor", false);
@@ -82,4 +82,4 @@ void apply(const QVariantMap &colors)
     qApp->setPalette(KColorScheme::createApplicationPalette(config));
 }
 
-} // namespace MopMail::ColorScheme
+} // namespace Fjordpost::ColorScheme

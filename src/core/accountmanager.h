@@ -5,7 +5,7 @@
 #include <QList>
 #include <QObject>
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Verwaltet die Konten (Persistenz in der Datenbank) und benachrichtigt
 // Modelle und Sync-Dienste über Änderungen.
@@ -24,12 +24,12 @@ public:
     bool remove(qint64 id);
 
 Q_SIGNALS:
-    void accountAdded(const MopMail::Account &account);
-    void accountChanged(const MopMail::Account &account);
+    void accountAdded(const Fjordpost::Account &account);
+    void accountChanged(const Fjordpost::Account &account);
     void accountRemoved(qint64 id);
 
 private:
     QList<Account> m_accounts;
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

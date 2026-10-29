@@ -7,7 +7,7 @@
 #include <QSaveFile>
 #include <QUuid>
 
-namespace MopMail::BlobStore {
+namespace Fjordpost::BlobStore {
 
 QString absolutePath(const QString &relativePath)
 {
@@ -44,4 +44,4 @@ bool remove(const QString &relativePath)
     return !relativePath.isEmpty() && QFile::remove(absolutePath(relativePath));
 }
 
-} // namespace MopMail::BlobStore
+} // namespace Fjordpost::BlobStore

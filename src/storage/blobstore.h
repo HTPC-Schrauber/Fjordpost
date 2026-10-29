@@ -3,7 +3,7 @@
 #include <QByteArray>
 #include <QString>
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Ablage der Roh-Nachrichten (RFC 822) als Dateien unterhalb des
 // Datenverzeichnisses. In der Datenbank steht nur der relative Pfad.
@@ -16,4 +16,4 @@ bool remove(const QString &relativePath);
 QString absolutePath(const QString &relativePath);
 
 } // namespace BlobStore
-} // namespace MopMail
+} // namespace Fjordpost

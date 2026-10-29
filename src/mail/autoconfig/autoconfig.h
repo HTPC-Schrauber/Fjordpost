@@ -8,7 +8,7 @@
 
 class QNetworkAccessManager;
 
-namespace MopMail {
+namespace Fjordpost {
 
 struct ServerSettings {
     AccountType type = AccountType::Imap; // nur für Eingangsserver relevant
@@ -46,7 +46,7 @@ public:
     static DiscoveredSettings guess(const QString &email);
 
 Q_SIGNALS:
-    void finished(const MopMail::DiscoveredSettings &settings);
+    void finished(const Fjordpost::DiscoveredSettings &settings);
     void progress(const QString &message);
 
 private:
@@ -62,6 +62,6 @@ private:
     int m_generation = 0;
 };
 
-} // namespace MopMail
+} // namespace Fjordpost
 
-Q_DECLARE_METATYPE(MopMail::DiscoveredSettings)
+Q_DECLARE_METATYPE(Fjordpost::DiscoveredSettings)

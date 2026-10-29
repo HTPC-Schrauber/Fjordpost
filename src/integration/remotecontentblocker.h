@@ -3,7 +3,7 @@
 #include <QWebEngineUrlRequestInterceptor>
 #include <atomic>
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Blockiert in der Nachrichtenansicht alle Netzwerkzugriffe (Tracking-Pixel,
 // externe Bilder), solange der Nutzer sie nicht ausdrücklich erlaubt.
@@ -20,4 +20,4 @@ private:
     std::atomic_bool m_allowed = false;
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

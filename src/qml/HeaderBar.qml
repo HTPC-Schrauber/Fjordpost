@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.mopmail.core
+import de.fjordblau.fjordpost.core
 import "components"
 
 // Schmale Kopfleiste im Fenster (Inhalt der Titelleiste aus dem Entwurf);
@@ -39,14 +39,14 @@ Rectangle {
             }
             QQC2.Label {
                 anchors.centerIn: parent
-                text: "M"
+                text: "F"
                 color: "white"
                 font.bold: true
                 font.pixelSize: 10
             }
         }
         QQC2.Label {
-            text: "MopMail"
+            text: "Fjordpost"
             font.pointSize: Theme.fontXs
             font.bold: true
             color: Theme.textPrimary

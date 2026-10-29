@@ -2,7 +2,7 @@
 
 #include <QAbstractListModel>
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Ordnerliste für das gewählte Konto. Bei accountId == 0 (Unified Inbox)
 // werden virtuelle Sammelordner nach Rolle angezeigt (folderId == 0, role gesetzt).
@@ -47,4 +47,4 @@ private:
 
 QString iconForFolderRole(const QString &role);
 
-} // namespace MopMail
+} // namespace Fjordpost

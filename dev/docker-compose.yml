@@ -1,10 +1,10 @@
 # Lokale Testserver für die Entwicklung.
 #   sudo docker compose -f dev/docker-compose.yml up -d
 #
-# GreenMail: SMTP/IMAP/POP3 ohne Konfiguration; Mails an @mopmail.test
+# GreenMail: SMTP/IMAP/POP3 ohne Konfiguration; Mails an @fjordpost.test
 # werden lokal zugestellt. Testkonten (Benutzername = E-Mail-Adresse):
-#   max@mopmail.test / geheim
-#   anna@mopmail.test / geheim
+#   max@fjordpost.test / geheim
+#   anna@fjordpost.test / geheim
 # Ports: IMAP 3143 (unverschlüsselt), IMAPS 3993, POP3 3110, POP3S 3995,
 #        SMTP 3025 (unverschlüsselt), SMTPS 3465
 services:
@@ -16,7 +16,7 @@ services:
         -Dgreenmail.hostname=0.0.0.0
         -Dgreenmail.auth.disabled=false
         -Dgreenmail.users.login=email
-        -Dgreenmail.users=max@mopmail.test:geheim,anna@mopmail.test:geheim
+        -Dgreenmail.users=max@fjordpost.test:geheim,anna@fjordpost.test:geheim
         -Dgreenmail.verbose
     ports:
       - "3025:3025"

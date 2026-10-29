@@ -31,7 +31,7 @@
 #include <QStandardPaths>
 #include <QTextDocumentFragment>
 
-namespace MopMail {
+namespace Fjordpost {
 
 namespace {
 
@@ -716,7 +716,7 @@ QString AppController::saveDraft(const QVariantMap &data)
 
 QString AppController::attachmentTempPath(qint64 messageId, int index, const QString &fileName) const
 {
-    const QString dir = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation)).filePath(QStringLiteral("mopmail/%1-%2").arg(messageId).arg(index));
+    const QString dir = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation)).filePath(QStringLiteral("fjordpost/%1-%2").arg(messageId).arg(index));
     QDir().mkpath(dir);
     QString name = fileName.isEmpty() ? QStringLiteral("attachment") : fileName;
     name.replace(QLatin1Char('/'), QLatin1Char('_'));
@@ -752,4 +752,4 @@ bool AppController::saveAttachment(qint64 messageId, int index, const QUrl &targ
     return true;
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

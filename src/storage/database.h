@@ -3,7 +3,7 @@
 #include <QSqlDatabase>
 #include <QString>
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Zugriff auf die SQLite-Datenbank. Jeder Thread erhält eine eigene
 // Verbindung (QSqlDatabase-Verbindungen sind nicht threadübergreifend nutzbar).
@@ -27,4 +27,4 @@ private:
     static bool migrate(QSqlDatabase &db);
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

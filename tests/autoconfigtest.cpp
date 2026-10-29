@@ -2,7 +2,7 @@
 
 #include <QTest>
 
-using namespace MopMail;
+using namespace Fjordpost;
 
 class AutoConfigTest : public QObject
 {

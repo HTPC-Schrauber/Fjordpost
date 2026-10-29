@@ -1,6 +1,6 @@
 #include "messagebuilder.h"
 
-#include "mopmail-version.h"
+#include "fjordpost-version.h"
 
 #include <KLocalizedString>
 #include <KMime/Message>
@@ -12,7 +12,7 @@
 #include <QMimeDatabase>
 #include <QUuid>
 
-namespace MopMail::MessageBuilder {
+namespace Fjordpost::MessageBuilder {
 
 namespace {
 
@@ -89,11 +89,11 @@ QByteArray build(const OutgoingMessage &m, QByteArray *messageId, QString *error
         msg.cc()->addAddress(mailbox(a));
     msg.subject()->fromUnicodeString(m.subject);
     msg.date()->setDateTime(QDateTime::currentDateTime());
-    msg.userAgent()->from7BitString("MopMail/" MOPMAIL_VERSION_STRING);
+    msg.userAgent()->from7BitString("Fjordpost/" FJORDPOST_VERSION_STRING);
 
     const QString domain = m.fromEmail.section(QLatin1Char('@'), 1);
     const QByteArray id = QUuid::createUuid().toString(QUuid::WithoutBraces).toLatin1() + '@'
-        + (domain.isEmpty() ? QByteArray("mopmail.local") : domain.toUtf8());
+        + (domain.isEmpty() ? QByteArray("fjordpost.local") : domain.toUtf8());
     msg.messageID()->setIdentifier(id);
     if (messageId)
         *messageId = id;
@@ -135,4 +135,4 @@ QByteArray build(const OutgoingMessage &m, QByteArray *messageId, QString *error
     return KMime::LFtoCRLF(msg.encodedContent());
 }
 
-} // namespace MopMail::MessageBuilder
+} // namespace Fjordpost::MessageBuilder

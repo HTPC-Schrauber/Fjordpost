@@ -1,8 +1,8 @@
 [Global]
 IconName=mail-client
-Name=MopMail
-Comment=MopMail email client
-Comment[de]=MopMail E-Mail-Programm
+Name=Fjordpost
+Comment=Fjordpost email client
+Comment[de]=Fjordpost E-Mail-Programm
 
 [Event/newMail]
 Name=New mail

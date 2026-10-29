@@ -4,7 +4,7 @@
 
 #include <QAbstractListModel>
 
-namespace MopMail {
+namespace Fjordpost {
 
 class AccountManager;
 
@@ -38,4 +38,4 @@ private:
     QHash<qint64, int> m_unread;
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

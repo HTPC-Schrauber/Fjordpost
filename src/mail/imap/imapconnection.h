@@ -12,7 +12,7 @@ class LoginJob;
 class Session;
 }
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Eine angemeldete IMAP-Verbindung mit serieller Aufgabenwarteschlange.
 // Jede Aufgabe bekommt die Session und ruft done() auf, wenn sie fertig ist;
@@ -66,4 +66,4 @@ private:
     QString m_selected;
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

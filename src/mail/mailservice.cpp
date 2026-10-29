@@ -14,9 +14,9 @@
 #include <QLoggingCategory>
 #include <QSqlQuery>
 
-Q_LOGGING_CATEGORY(lcService, "mopmail.service")
+Q_LOGGING_CATEGORY(lcService, "fjordpost.service")
 
-namespace MopMail {
+namespace Fjordpost {
 
 MailService::MailService(AccountManager *accounts, SecretStore *secrets, QObject *parent)
     : QObject(parent)
@@ -287,4 +287,4 @@ void MailService::afterSent(qint64 outboxId, qint64 accountId, const QByteArray 
     }
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

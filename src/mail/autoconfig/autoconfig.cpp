@@ -9,9 +9,9 @@
 #include <QUrlQuery>
 #include <QXmlStreamReader>
 
-Q_LOGGING_CATEGORY(lcAutoconfig, "mopmail.autoconfig")
+Q_LOGGING_CATEGORY(lcAutoconfig, "fjordpost.autoconfig")
 
-namespace MopMail {
+namespace Fjordpost {
 
 namespace {
 
@@ -218,4 +218,4 @@ DiscoveredSettings AutoConfig::guess(const QString &email)
     return s;
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

@@ -10,7 +10,7 @@
 #include <KIMAP/Session>
 #include <KLocalizedString>
 
-namespace MopMail {
+namespace Fjordpost {
 
 namespace {
 
@@ -280,4 +280,4 @@ void AccountSetup::save(const QString &password)
     });
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

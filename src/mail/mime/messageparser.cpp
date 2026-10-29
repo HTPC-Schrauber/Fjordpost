@@ -6,7 +6,7 @@
 #include <QRegularExpression>
 #include <QTextDocumentFragment>
 
-namespace MopMail::MessageParser {
+namespace Fjordpost::MessageParser {
 
 namespace {
 
@@ -132,4 +132,4 @@ QString makeSnippet(const QString &plainText, const QString &html)
     return snippet;
 }
 
-} // namespace MopMail::MessageParser
+} // namespace Fjordpost::MessageParser

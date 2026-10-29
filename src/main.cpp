@@ -5,7 +5,7 @@
 #include "integration/notifier.h"
 #include "integration/remotecontentblocker.h"
 #include "mail/mailservice.h"
-#include "mopmail-version.h"
+#include "fjordpost-version.h"
 #include "storage/database.h"
 #include "storage/demodata.h"
 
@@ -27,7 +27,7 @@
 #include <QTimer>
 #include <QtWebEngineQuick>
 
-using namespace MopMail;
+using namespace Fjordpost;
 
 int main(int argc, char *argv[])
 {
@@ -37,15 +37,17 @@ int main(int argc, char *argv[])
     // QApplication statt QGuiApplication: wird vom qqc2-desktop-style
     // (native Breeze-Optik der Bedienelemente) benötigt.
     QApplication app(argc, argv);
-    KLocalizedString::setApplicationDomain("mopmail");
+    KLocalizedString::setApplicationDomain("fjordpost");
 
-    KAboutData about(QStringLiteral("mopmail"),
-                     QStringLiteral("MopMail"),
-                     QStringLiteral(MOPMAIL_VERSION_STRING),
+    KAboutData about(QStringLiteral("fjordpost"),
+                     QStringLiteral("Fjordpost"),
+                     QStringLiteral(FJORDPOST_VERSION_STRING),
                      i18n("A modern email client for KDE Plasma"),
                      KAboutLicense::GPL_V3,
-                     i18n("© 2026 MopMail contributors"));
-    about.setDesktopFileName(QStringLiteral("org.mopmail.MopMail"));
+                     i18n("© 2026 Fjordpost contributors"));
+    // Bestimmt App-ID, D-Bus-Namen und den Konfigurationsordner (~/.config/fjordblau.de/).
+    about.setOrganizationDomain("fjordblau.de");
+    about.setDesktopFileName(QStringLiteral("de.fjordblau.Fjordpost"));
     KAboutData::setApplicationData(about);
 
     // Außerhalb von Plasma (z. B. WSLg, andere Desktops) setzt niemand ein
@@ -82,7 +84,7 @@ int main(int argc, char *argv[])
 
     const QString dataDir = parser.isSet(dataDirOption) ? parser.value(dataDirOption)
                                                          : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (!Database::initialize(QDir(dataDir).filePath(QStringLiteral("mopmail.db"))))
+    if (!Database::initialize(QDir(dataDir).filePath(QStringLiteral("fjordpost.db"))))
         return 1;
 
     AccountManager accounts;
@@ -110,11 +112,11 @@ int main(int argc, char *argv[])
     QObject::connect(&mail, &MailService::newMessages, &notifier, &Notifier::notifyNewMessages);
     QObject::connect(&notifier, &Notifier::openMessageRequested, &controller, &AppController::openMessage);
 
-    qmlRegisterSingletonInstance("org.mopmail.core", 1, 0, "App", &controller);
+    qmlRegisterSingletonInstance("de.fjordblau.fjordpost.core", 1, 0, "App", &controller);
 
     QQmlApplicationEngine engine;
     KLocalization::setupLocalizedContext(&engine);
-    engine.loadFromModule("org.mopmail.app", "Main");
+    engine.loadFromModule("de.fjordblau.fjordpost.app", "Main");
     if (engine.rootObjects().isEmpty())
         return 1;
     auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());

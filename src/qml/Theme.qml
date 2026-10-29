@@ -3,7 +3,7 @@ pragma Singleton
 import QtQuick
 import QtCore
 
-// Design-Tokens aus dem MopMail-Entwurf (mopmail_ui.html). Mit
+// Design-Tokens aus dem Fjordpost-Entwurf (mopmail_ui.html). Mit
 // "useSystemColors" werden stattdessen die Farben des KDE-Farbschemas verwendet.
 QtObject {
     id: theme

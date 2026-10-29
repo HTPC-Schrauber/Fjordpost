@@ -3,7 +3,7 @@ import QtQuick.Controls as QQC2
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.mopmail.core
+import de.fjordblau.fjordpost.core
 import "components"
 
 // Inhalt des Composers (neu, Antwort, Weiterleitung). Wird entweder im Hauptfenster

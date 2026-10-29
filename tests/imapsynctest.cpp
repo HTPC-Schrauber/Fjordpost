@@ -12,7 +12,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-using namespace MopMail;
+using namespace Fjordpost;
 
 namespace {
 
@@ -49,7 +49,7 @@ class ImapSyncTest : public QObject
 private Q_SLOTS:
     void initTestCase()
     {
-        KLocalizedString::setApplicationDomain("mopmail");
+        KLocalizedString::setApplicationDomain("fjordpost");
         QVERIFY(m_dir.isValid());
         QVERIFY(Database::initialize(m_dir.filePath(QStringLiteral("test.db"))));
     }

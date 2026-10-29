@@ -7,9 +7,9 @@
 #include <QSqlQuery>
 #include <QThread>
 
-Q_LOGGING_CATEGORY(lcDb, "mopmail.db")
+Q_LOGGING_CATEGORY(lcDb, "fjordpost.db")
 
-namespace MopMail {
+namespace Fjordpost {
 
 namespace {
 
@@ -149,7 +149,7 @@ constexpr int migrationCount = int(sizeof(migrations) / sizeof(migrations[0]));
 
 QString connectionName()
 {
-    return QStringLiteral("mopmail-%1").arg(quintptr(QThread::currentThreadId()));
+    return QStringLiteral("fjordpost-%1").arg(quintptr(QThread::currentThreadId()));
 }
 
 bool execScript(QSqlDatabase &db, const QString &script)
@@ -270,4 +270,4 @@ bool Database::migrate(QSqlDatabase &db)
     return true;
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

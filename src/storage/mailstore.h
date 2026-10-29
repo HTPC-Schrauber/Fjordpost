@@ -7,7 +7,7 @@
 #include <QSet>
 #include <QString>
 
-namespace MopMail {
+namespace Fjordpost {
 
 struct FolderState {
     qint64 id = 0;
@@ -93,4 +93,4 @@ QList<QByteArray> imapFlagsFor(int mask);
 QString roleFor(const QString &path, const QList<QByteArray> &attributes);
 
 } // namespace MailStore
-} // namespace MopMail
+} // namespace Fjordpost

@@ -5,7 +5,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace MopMail {
+namespace Fjordpost {
 
 // Inhalt einer zu sendenden Nachricht, wie ihn der Composer liefert.
 struct OutgoingMessage {
@@ -36,4 +36,4 @@ QStringList envelopeRecipients(const OutgoingMessage &message);
 QStringList splitAddresses(const QString &input);
 
 } // namespace MessageBuilder
-} // namespace MopMail
+} // namespace Fjordpost

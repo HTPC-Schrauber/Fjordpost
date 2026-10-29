@@ -7,9 +7,9 @@
 #include <QLoggingCategory>
 #include <QSet>
 
-Q_LOGGING_CATEGORY(lcSmtp, "mopmail.smtp")
+Q_LOGGING_CATEGORY(lcSmtp, "fjordpost.smtp")
 
-namespace MopMail {
+namespace Fjordpost {
 
 namespace {
 
@@ -334,4 +334,4 @@ void SmtpSender::testLogin(const Account &account, const QString &secret, Callba
     session->start();
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

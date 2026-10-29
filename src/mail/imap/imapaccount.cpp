@@ -27,7 +27,7 @@
 
 Q_DECLARE_LOGGING_CATEGORY(lcImap)
 
-namespace MopMail {
+namespace Fjordpost {
 
 namespace {
 
@@ -699,4 +699,4 @@ void ImapAccount::startIdle()
     login->start();
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

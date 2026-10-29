@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build- und Laufzeitabhängigkeiten für MopMail unter Debian 13 (trixie).
+# Build- und Laufzeitabhängigkeiten für Fjordpost unter Debian 13 (trixie).
 set -euo pipefail
 apt-get update
 apt-get install -y --no-install-recommends \

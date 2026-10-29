@@ -5,7 +5,7 @@
 #include <QHostAddress>
 #include <QSslSocket>
 
-namespace MopMail {
+namespace Fjordpost {
 
 LineSocket::LineSocket(QObject *parent)
     : QObject(parent)
@@ -119,4 +119,4 @@ void LineSocket::fail(const QString &message)
     Q_EMIT failed(message);
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

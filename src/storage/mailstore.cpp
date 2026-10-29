@@ -11,9 +11,9 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-Q_LOGGING_CATEGORY(lcStore, "mopmail.store")
+Q_LOGGING_CATEGORY(lcStore, "fjordpost.store")
 
-namespace MopMail::MailStore {
+namespace Fjordpost::MailStore {
 
 namespace {
 
@@ -534,4 +534,4 @@ QString roleFor(const QString &path, const QList<QByteArray> &attributes)
     return it != names.constEnd() ? QString::fromLatin1(it.value()) : QString();
 }
 
-} // namespace MopMail::MailStore
+} // namespace Fjordpost::MailStore

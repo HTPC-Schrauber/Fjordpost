@@ -7,7 +7,7 @@
 #include <QDateTime>
 #include <QSqlQuery>
 
-namespace MopMail {
+namespace Fjordpost {
 
 namespace {
 
@@ -21,7 +21,7 @@ struct DemoMail {
 const DemoMail demoMails[] = {
     {"Anna Becker", "anna.becker@example.org", "Treffen am Donnerstag",
      "Hallo,\n\npasst Dir Donnerstag um 14 Uhr für unser Projekttreffen? Ich würde den Raum im zweiten Stock reservieren.\n\nViele Grüße\nAnna"},
-    {"GitHub", "noreply@github.com", "[mopmail] Neue Pull-Request: IMAP IDLE-Unterstützung",
+    {"GitHub", "noreply@github.com", "[fjordpost] Neue Pull-Request: IMAP IDLE-Unterstützung",
      "Eine neue Pull-Request wurde eröffnet.\n\nÄnderungen: IDLE-Unterstützung für sofortige Benachrichtigungen bei neuen Mails."},
     {"Deutsche Bahn", "service@bahn.example", "Ihre Buchungsbestätigung",
      "Vielen Dank für Ihre Buchung.\n\nHamburg Hbf → München Hbf\nAbfahrt 08:04, Gleis 13\n\nGute Reise!"},
@@ -122,4 +122,4 @@ void seedDemoData(AccountManager &accounts)
     db.commit();
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

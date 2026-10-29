@@ -3,9 +3,9 @@
 #include <QLoggingCategory>
 #include <qt6keychain/keychain.h>
 
-Q_LOGGING_CATEGORY(lcSecrets, "mopmail.secrets")
+Q_LOGGING_CATEGORY(lcSecrets, "fjordpost.secrets")
 
-namespace MopMail {
+namespace Fjordpost {
 
 SecretStore::SecretStore(QObject *parent)
     : QObject(parent)
@@ -14,7 +14,7 @@ SecretStore::SecretStore(QObject *parent)
 
 QString SecretStore::serviceName()
 {
-    return QStringLiteral("MopMail");
+    return QStringLiteral("Fjordpost");
 }
 
 void SecretStore::read(const QString &key, ReadCallback callback)
@@ -58,4 +58,4 @@ void SecretStore::remove(const QString &key, WriteCallback callback)
     job->start();
 }
 
-} // namespace MopMail
+} // namespace Fjordpost

@@ -1,4 +1,4 @@
-# MopMail
+# Fjordpost
 
 Ein moderner E-Mail-Client für KDE Plasma im Stil von Mailbird.
 C++20 · Qt 6 · KDE Frameworks 6 · Kirigami
@@ -29,7 +29,7 @@ ctest --test-dir build --output-on-failure
 Starten mit Beispieldaten (eigenes Datenverzeichnis, damit echte Daten unberührt bleiben):
 
 ```sh
-build/bin/mopmail --demo --data-dir /tmp/mopmail-demo
+build/bin/fjordpost --demo --data-dir /tmp/fjordpost-demo
 ```
 
 Entwickleroptionen: `--offline` (keine Serververbindung), `--screenshot <datei>` und
@@ -41,9 +41,9 @@ Entwickleroptionen: `--offline` (keine Serververbindung), `--screenshot <datei>`
 sudo docker compose -f dev/docker-compose.yml up -d
 ```
 
-Konto in MopMail anlegen: `max@mopmail.test` / `geheim`, nach „Weiter“ die Server
+Konto in Fjordpost anlegen: `max@fjordpost.test` / `geheim`, nach „Weiter“ die Server
 manuell eintragen: IMAP `localhost:3143` und SMTP `localhost:3025`, jeweils ohne
-Verschlüsselung. Eine Mail an `anna@mopmail.test` landet im zweiten Testkonto.
+Verschlüsselung. Eine Mail an `anna@fjordpost.test` landet im zweiten Testkonto.
 
 ## Tastenkürzel
 

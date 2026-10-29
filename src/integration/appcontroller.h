@@ -4,7 +4,7 @@
 #include <QUrl>
 #include <QVariantMap>
 
-namespace MopMail {
+namespace Fjordpost {
 
 class AccountManager;
 class AccountModel;
@@ -139,4 +139,4 @@ private:
     QStringList m_readerColors;
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

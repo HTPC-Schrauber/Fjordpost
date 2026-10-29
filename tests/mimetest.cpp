@@ -4,7 +4,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-using namespace MopMail;
+using namespace Fjordpost;
 
 class MimeTest : public QObject
 {

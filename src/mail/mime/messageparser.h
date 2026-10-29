@@ -9,7 +9,7 @@ namespace KMime {
 class Message;
 }
 
-namespace MopMail {
+namespace Fjordpost {
 
 struct AttachmentInfo {
     int index = 0; // Position in KMime::Content::attachments()
@@ -57,4 +57,4 @@ QByteArray attachmentData(const QByteArray &raw, int index);
 QString makeSnippet(const QString &plainText, const QString &html);
 
 } // namespace MessageParser
-} // namespace MopMail
+} // namespace Fjordpost

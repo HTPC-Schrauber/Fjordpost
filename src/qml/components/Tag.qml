@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls as QQC2
-import org.mopmail.app
+import de.fjordblau.fjordpost.app
 
 // Kleines Etikett mit Rahmen (Ordner, Labels, Status).
 Rectangle {

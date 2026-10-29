@@ -8,7 +8,7 @@
 #include <QSet>
 #include <QTimer>
 
-namespace MopMail {
+namespace Fjordpost {
 
 class AccountManager;
 class ImapAccount;
@@ -73,4 +73,4 @@ private:
     QTimer m_outboxTimer;
 };
 
-} // namespace MopMail
+} // namespace Fjordpost

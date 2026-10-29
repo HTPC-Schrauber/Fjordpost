@@ -6,7 +6,7 @@
 
 #include <QSqlQuery>
 
-namespace MopMail {
+namespace Fjordpost {
 
 AccountModel::AccountModel(AccountManager *manager, QObject *parent)
     : QAbstractListModel(parent)
@@ -75,4 +75,4 @@ QHash<int, QByteArray> AccountModel::roleNames() const
     };
 }
 
-} // namespace MopMail
+} // namespace Fjordpost
