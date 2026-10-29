@@ -49,6 +49,8 @@ public:
     Q_INVOKABLE void discover(const QString &email);
     Q_INVOKABLE void testAndSave(const QString &password);
     Q_INVOKABLE void cancel();
+    // Ergebnis der Suche übernehmen (sonst über discover(); öffentlich für Tests)
+    void applyDiscovered(const DiscoveredSettings &settings);
 
 Q_SIGNALS:
     void busyChanged();
@@ -62,7 +64,11 @@ private:
     void setBusy(bool busy);
     void setStatus(const QString &status);
     void setError(const QString &error);
-    void applyCandidate(int incomingIndex, int outgoingIndex);
+    void applyIncomingCandidate();
+    void applyOutgoingCandidate();
+    bool showsIncomingCandidate() const;
+    bool showsOutgoingCandidate() const;
+    void restoreEntered(bool incoming, bool outgoing);
     Account currentAccount() const;
     void testIncoming(const QString &password);
     void testOutgoing(const QString &password);
@@ -76,6 +82,23 @@ private:
     int m_incomingCandidate = 0;
     int m_outgoingCandidate = 0;
     int m_generation = 0;
+    // Eigene Eingaben werden beim Anmeldeversuch nicht durch Vorschläge ersetzt.
+    bool m_tryIncomingCandidates = false;
+    bool m_tryOutgoingCandidates = false;
+
+    // Werte beim Klick auf "Anmelden", zum Wiederherstellen nach einem Fehlschlag
+    struct Entered {
+        bool pop3 = false;
+        QString username;
+        QString incomingHost;
+        int incomingPort = 0;
+        int incomingSecurity = 0;
+        QString outgoingHost;
+        int outgoingPort = 0;
+        int outgoingSecurity = 0;
+        int incomingCandidate = 0;
+        int outgoingCandidate = 0;
+    } m_entered;
 
     bool m_busy = false;
     QString m_status;

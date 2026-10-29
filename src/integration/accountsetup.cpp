@@ -52,15 +52,19 @@ AccountSetup::AccountSetup(AccountManager *accounts, SecretStore *secrets, QObje
     , m_smtp(new SmtpSender(this))
 {
     connect(m_autoconfig, &AutoConfig::progress, this, &AccountSetup::setStatus);
-    connect(m_autoconfig, &AutoConfig::finished, this, [this](const DiscoveredSettings &settings) {
-        m_settings = settings;
-        m_incomingCandidate = 0;
-        m_outgoingCandidate = 0;
-        applyCandidate(0, 0);
-        setBusy(false);
-        setStatus(QString());
-        Q_EMIT discovered();
-    });
+    connect(m_autoconfig, &AutoConfig::finished, this, &AccountSetup::applyDiscovered);
+}
+
+void AccountSetup::applyDiscovered(const DiscoveredSettings &settings)
+{
+    m_settings = settings;
+    m_incomingCandidate = 0;
+    m_outgoingCandidate = 0;
+    applyIncomingCandidate();
+    applyOutgoingCandidate();
+    setBusy(false);
+    setStatus(QString());
+    Q_EMIT discovered();
 }
 
 void AccountSetup::reset()
@@ -130,24 +134,29 @@ void AccountSetup::discover(const QString &email)
     m_autoconfig->discover(m_email);
 }
 
-void AccountSetup::applyCandidate(int incomingIndex, int outgoingIndex)
+void AccountSetup::applyIncomingCandidate()
 {
-    if (incomingIndex < m_settings.incoming.size()) {
-        const ServerSettings &in = m_settings.incoming.at(incomingIndex);
+    if (m_incomingCandidate < m_settings.incoming.size()) {
+        const ServerSettings &in = m_settings.incoming.at(m_incomingCandidate);
         m_pop3 = in.type == AccountType::Pop3;
         m_incomingHost = in.host;
         m_incomingPort = in.port;
         m_incomingSecurity = indexFromSecurity(in.security);
         m_username = in.username.isEmpty() ? m_email : in.username;
         m_needsOAuth = in.oauth;
+        Q_EMIT settingsChanged();
     }
-    if (outgoingIndex < m_settings.outgoing.size()) {
-        const ServerSettings &out = m_settings.outgoing.at(outgoingIndex);
+}
+
+void AccountSetup::applyOutgoingCandidate()
+{
+    if (m_outgoingCandidate < m_settings.outgoing.size()) {
+        const ServerSettings &out = m_settings.outgoing.at(m_outgoingCandidate);
         m_outgoingHost = out.host;
         m_outgoingPort = out.port;
         m_outgoingSecurity = indexFromSecurity(out.security);
+        Q_EMIT settingsChanged();
     }
-    Q_EMIT settingsChanged();
 }
 
 Account AccountSetup::currentAccount() const
@@ -180,7 +189,48 @@ void AccountSetup::testAndSave(const QString &password)
     setError(QString());
     setBusy(true);
     ++m_generation;
+
+    m_entered = {m_pop3, m_username, m_incomingHost, m_incomingPort, m_incomingSecurity,
+                 m_outgoingHost, m_outgoingPort, m_outgoingSecurity, m_incomingCandidate, m_outgoingCandidate};
+    m_tryIncomingCandidates = m_settings.guessed && showsIncomingCandidate();
+    m_tryOutgoingCandidates = showsOutgoingCandidate();
     testIncoming(password);
+}
+
+bool AccountSetup::showsIncomingCandidate() const
+{
+    if (m_incomingCandidate >= m_settings.incoming.size())
+        return false;
+    const ServerSettings &in = m_settings.incoming.at(m_incomingCandidate);
+    return (in.type == AccountType::Pop3) == m_pop3 && in.host == m_incomingHost.trimmed() && in.port == m_incomingPort
+        && indexFromSecurity(in.security) == m_incomingSecurity;
+}
+
+bool AccountSetup::showsOutgoingCandidate() const
+{
+    if (m_outgoingCandidate >= m_settings.outgoing.size())
+        return false;
+    const ServerSettings &out = m_settings.outgoing.at(m_outgoingCandidate);
+    return out.host == m_outgoingHost.trimmed() && out.port == m_outgoingPort && indexFromSecurity(out.security) == m_outgoingSecurity;
+}
+
+void AccountSetup::restoreEntered(bool incoming, bool outgoing)
+{
+    if (incoming) {
+        m_pop3 = m_entered.pop3;
+        m_username = m_entered.username;
+        m_incomingHost = m_entered.incomingHost;
+        m_incomingPort = m_entered.incomingPort;
+        m_incomingSecurity = m_entered.incomingSecurity;
+        m_incomingCandidate = m_entered.incomingCandidate;
+    }
+    if (outgoing) {
+        m_outgoingHost = m_entered.outgoingHost;
+        m_outgoingPort = m_entered.outgoingPort;
+        m_outgoingSecurity = m_entered.outgoingSecurity;
+        m_outgoingCandidate = m_entered.outgoingCandidate;
+    }
+    Q_EMIT settingsChanged();
 }
 
 void AccountSetup::testIncoming(const QString &password)
@@ -211,11 +261,13 @@ void AccountSetup::testIncoming(const QString &password)
             return;
         }
         // Bei geratenen Einstellungen nächsten Kandidaten probieren.
-        if (m_settings.guessed && m_incomingCandidate + 1 < m_settings.incoming.size()) {
-            applyCandidate(++m_incomingCandidate, m_outgoingCandidate);
+        if (m_tryIncomingCandidates && m_incomingCandidate + 1 < m_settings.incoming.size()) {
+            ++m_incomingCandidate;
+            applyIncomingCandidate();
             testIncoming(password);
             return;
         }
+        restoreEntered(true, true);
         setBusy(false);
         setStatus(QString());
         setError(i18n("Could not sign in to the incoming server: %1", error));
@@ -235,11 +287,14 @@ void AccountSetup::testOutgoing(const QString &password)
             save(password);
             return;
         }
-        if (m_outgoingCandidate + 1 < m_settings.outgoing.size()) {
-            applyCandidate(m_incomingCandidate, ++m_outgoingCandidate);
+        if (m_tryOutgoingCandidates && m_outgoingCandidate + 1 < m_settings.outgoing.size()) {
+            ++m_outgoingCandidate;
+            applyOutgoingCandidate();
             testOutgoing(password);
             return;
         }
+        // Ein funktionierender Eingangsserver bleibt stehen, nur SMTP zurücksetzen.
+        restoreEntered(false, true);
         setBusy(false);
         setStatus(QString());
         setError(i18n("Could not sign in to the outgoing server: %1", error));
