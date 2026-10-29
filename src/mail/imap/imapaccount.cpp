@@ -91,12 +91,18 @@ void ImapAccount::setSyncing(bool syncing)
     Q_EMIT syncingChanged(syncing);
 }
 
+bool ImapAccount::isInteractiveBusy() const
+{
+    return m_interactive->isBusy();
+}
+
 void ImapAccount::shutdown()
 {
     m_shuttingDown = true;
     m_idleRetry.stop();
-    if (m_idleJob)
-        m_idleJob->stop();
+    // Kein IdleJob::stop(): das "DONE" würde erst nach dem Schließen des Sockets
+    // geschrieben (Warnung "device not open"). Der Server beendet IDLE von selbst,
+    // wenn die Verbindung getrennt wird.
     if (m_idleSession) {
         m_idleSession->close();
         m_idleSession->deleteLater();

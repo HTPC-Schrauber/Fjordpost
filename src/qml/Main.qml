@@ -98,6 +98,9 @@ Kirigami.AbstractApplicationWindow {
             compose(0, "new");
         } else if (name === "compose-window") {
             openComposer(App.composeData(0, "new"), true);
+        } else if (name === "undo-send") {
+            messageList.openFirst();
+            App.sendQuickReply("Test");
         } else if (name === "setup") {
             accountSetup.open();
         } else if (name === "settings") {
@@ -128,6 +131,31 @@ Kirigami.AbstractApplicationWindow {
         function onNotify(message) {
             root.notify(message);
         }
+        function onMessageQueued(outboxId, delaySeconds, draft) {
+            if (delaySeconds <= 0) {
+                root.notify(i18n("Message queued for sending."));
+                return;
+            }
+            toast.show(i18np("Sending message in %1 second…", "Sending message in %1 seconds…", delaySeconds), {
+                actionText: i18n("Undo"),
+                timeout: delaySeconds * 1000,
+                onAction: () => {
+                    if (!App.cancelQueued(outboxId)) {
+                        root.notify(i18n("The message has already been sent."));
+                        return;
+                    }
+                    const data = Object.assign({}, draft);
+                    data.dirty = true;
+                    root.openComposer(data, false);
+                }
+            });
+        }
+    }
+
+    Binding {
+        target: App
+        property: "undoSendSeconds"
+        value: Prefs.compose.undoSendSeconds
     }
 
     Component.onCompleted: {

@@ -143,6 +143,11 @@ const char *const migrations[] = {
         reference_kind    TEXT NOT NULL DEFAULT ''
     );
     )SQL",
+
+    // v3: Signaturen pro Konto (Klartext)
+    R"SQL(
+    ALTER TABLE accounts ADD COLUMN signature TEXT NOT NULL DEFAULT '';
+    )SQL",
 };
 
 constexpr int migrationCount = int(sizeof(migrations) / sizeof(migrations[0]));

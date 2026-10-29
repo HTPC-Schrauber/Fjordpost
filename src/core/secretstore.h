@@ -16,7 +16,8 @@ public:
 
     explicit SecretStore(QObject *parent = nullptr);
 
-    void read(const QString &key, ReadCallback callback);
+    // virtuell, damit Tests ohne KWallet/Secret Service auskommen
+    virtual void read(const QString &key, ReadCallback callback);
     void write(const QString &key, const QString &secret, WriteCallback callback = {});
     void remove(const QString &key, WriteCallback callback = {});
 

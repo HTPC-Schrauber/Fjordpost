@@ -32,6 +32,7 @@ struct Account {
     AuthMethod authMethod = AuthMethod::Password;
     bool enabled = true;
     int sortOrder = 0;
+    QString signature;     // Klartext ohne Trenner "-- "
 
     bool isValid() const { return id > 0; }
     QString secretKey() const { return secretKeyFor(id); }

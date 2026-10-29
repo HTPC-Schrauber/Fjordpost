@@ -22,6 +22,9 @@ public:
     // Legt ein neues Konto an (id wird vergeben) bzw. aktualisiert ein bestehendes.
     Account save(Account account);
     bool remove(qint64 id);
+    // Ändert nur die Signatur, ohne accountChanged auszulösen
+    // (das würde die Serververbindungen neu aufbauen).
+    bool setSignature(qint64 id, const QString &signature);
 
 Q_SIGNALS:
     void accountAdded(const Fjordpost::Account &account);

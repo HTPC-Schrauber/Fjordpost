@@ -596,7 +596,6 @@ Rectangle {
                                     return;
                                 }
                                 quickText.clear();
-                                pane.notify(i18n("Reply queued for sending."));
                             }
                         }
                     }

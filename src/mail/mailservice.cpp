@@ -11,6 +11,8 @@
 
 #include <KLocalizedString>
 #include <QDateTime>
+
+#include <algorithm>
 #include <QLoggingCategory>
 #include <QSqlQuery>
 
@@ -159,7 +161,7 @@ void MailService::flushPendingOps(qint64 accountId)
 
 // ------------------------------------------------------------------ Versand
 
-QString MailService::queueMessage(qint64 accountId, const OutgoingMessage &message, qint64 referenceMessage, const QString &referenceKind, int delaySeconds)
+QString MailService::queueMessage(qint64 accountId, const OutgoingMessage &message, qint64 referenceMessage, const QString &referenceKind, int delaySeconds, qint64 *outboxId)
 {
     const Account account = m_accounts->account(accountId);
     if (!account.isValid())
@@ -191,11 +193,37 @@ QString MailService::queueMessage(qint64 accountId, const OutgoingMessage &messa
     q.addBindValue(referenceKind.isNull() ? QStringLiteral("") : referenceKind);
     if (!q.exec())
         return i18n("The message could not be saved.");
+    if (outboxId)
+        *outboxId = q.lastInsertId().toLongLong();
 
     Q_EMIT outboxChanged();
     if (delaySeconds <= 0)
         processOutbox();
+    else // nicht erst auf den nächsten Durchlauf des Postausgang-Timers warten
+        QTimer::singleShot(delaySeconds * 1000 + 200, this, &MailService::processOutbox);
     return {};
+}
+
+bool MailService::cancelQueued(qint64 outboxId)
+{
+    if (m_sendingOutbox.contains(outboxId))
+        return false;
+
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT blob_path FROM outbox WHERE id = ?"));
+    q.addBindValue(outboxId);
+    if (!q.exec() || !q.next())
+        return false;
+    const QString blob = q.value(0).toString();
+
+    QSqlQuery d(Database::connection());
+    d.prepare(QStringLiteral("DELETE FROM outbox WHERE id = ?"));
+    d.addBindValue(outboxId);
+    if (!d.exec() || d.numRowsAffected() == 0)
+        return false;
+    BlobStore::remove(blob);
+    Q_EMIT outboxChanged();
+    return true;
 }
 
 QString MailService::saveDraft(qint64 accountId, const OutgoingMessage &message)
@@ -209,6 +237,30 @@ QString MailService::saveDraft(qint64 accountId, const OutgoingMessage &message)
         return i18n("Drafts can only be saved for IMAP accounts at the moment.");
     imap->append(QString::fromLatin1(FolderRole::Drafts), raw, {"\\Seen", "\\Draft"});
     return {};
+}
+
+bool MailService::sendDelayedNow()
+{
+    // attempts = 0: nur Wartezeiten von "Senden rückgängig", keine
+    // Wiederholungen nach Fehlschlägen (die würden das Beenden aufhalten)
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("UPDATE outbox SET send_after = ? WHERE send_after > ? AND attempts = 0"));
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    q.addBindValue(now);
+    q.addBindValue(now);
+    q.exec();
+    processOutbox();
+    return hasPendingWork();
+}
+
+bool MailService::hasPendingWork() const
+{
+    if (!m_sendingOutbox.isEmpty())
+        return true;
+    // Nach dem Versand legt APPEND die Kopie in "Gesendet" ab.
+    return std::any_of(m_imap.cbegin(), m_imap.cend(), [](const ImapAccount *imap) {
+        return imap->isInteractiveBusy();
+    });
 }
 
 void MailService::processOutbox()

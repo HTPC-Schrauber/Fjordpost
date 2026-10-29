@@ -36,6 +36,8 @@ class AppController : public QObject
     Q_PROPERTY(bool remoteContentAllowed READ remoteContentAllowed NOTIFY remoteContentAllowedChanged)
     Q_PROPERTY(QString quickFilter READ quickFilter WRITE setQuickFilter NOTIFY quickFilterChanged)
     Q_PROPERTY(QString selectionSubtitle READ selectionSubtitle NOTIFY selectionChanged)
+    // Sekunden, die eine Nachricht nach "Senden" im Postausgang wartet (0 = sofort)
+    Q_PROPERTY(int undoSendSeconds READ undoSendSeconds WRITE setUndoSendSeconds NOTIFY undoSendSecondsChanged)
 
 public:
     AppController(AccountManager *accounts, MailService *mail, AccountSetup *setup, QObject *parent = nullptr);
@@ -60,6 +62,8 @@ public:
     QString quickFilter() const { return m_quickFilter; }
     void setQuickFilter(const QString &filter);
     QString selectionSubtitle() const;
+    int undoSendSeconds() const { return m_undoSendSeconds; }
+    void setUndoSendSeconds(int seconds);
 
     // 0 = Unified Inbox (alle Konten)
     Q_INVOKABLE void selectAccount(qint64 accountId);
@@ -93,6 +97,9 @@ public:
     Q_INVOKABLE QString saveDraft(const QVariantMap &data);
     // Schnellantwort aus dem Lesebereich: Text über dem Zitat der aktuellen Nachricht.
     Q_INVOKABLE QString sendQuickReply(const QString &text);
+    // "Senden rückgängig": true, wenn die Nachricht noch nicht unterwegs war.
+    Q_INVOKABLE bool cancelQueued(qint64 outboxId);
+    Q_INVOKABLE bool setSignature(qint64 accountId, const QString &signature);
 
     // Anhänge
     Q_INVOKABLE void openAttachment(qint64 messageId, int index);
@@ -109,6 +116,10 @@ Q_SIGNALS:
     void remoteContentAllowedChanged();
     void quickFilterChanged();
     void notify(const QString &message);
+    void undoSendSecondsChanged();
+    // draft enthält die Composer-Daten, um die Nachricht nach dem Rückgängigmachen
+    // wieder zu öffnen.
+    void messageQueued(qint64 outboxId, int delaySeconds, const QVariantMap &draft);
 
 private:
     void applyFilter();
@@ -137,6 +148,7 @@ private:
     bool m_remoteAllowed = false;
     QString m_quickFilter;
     QStringList m_readerColors;
+    int m_undoSendSeconds = 0;
 };
 
 } // namespace Fjordpost

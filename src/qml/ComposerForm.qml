@@ -17,6 +17,8 @@ Rectangle {
     property bool dirty: false
     // Im Hauptfenster: Knopf zum Herauslösen in ein eigenes Fenster anzeigen
     property bool inline: false
+    // Aktuell eingefügter Signaturblock; wird beim Wechsel des Absenders ersetzt.
+    property string signatureBlock: draft.signatureBlock ?? ""
 
     readonly property string title: subjectField.text.length > 0 ? subjectField.text : i18n("New Message")
 
@@ -41,8 +43,33 @@ Rectangle {
             showCc: ccRow.visible,
             dirty: composer.dirty,
             inReplyTo: draft.inReplyTo ?? "",
-            references: draft.references ?? []
+            references: draft.references ?? [],
+            signatureApplied: true,
+            signatureBlock: composer.signatureBlock
         };
+    }
+
+    function signatureOf(accountId) {
+        const identity = fromBox.model.find(i => i.accountId === accountId);
+        const text = identity ? identity.signature : "";
+        // Trenner "-- " nach RFC 3676, damit Mailprogramme die Signatur erkennen
+        return text.trim().length > 0 ? "\n\n-- \n" + text : "";
+    }
+
+    // Signatur des neuen Absenders einsetzen: den alten Block ersetzen oder,
+    // falls keiner (mehr) da ist, vor dem Zitat bzw. am Ende einfügen.
+    function switchSignature(accountId) {
+        const block = signatureOf(accountId);
+        const body = bodyArea.text;
+        const old = signatureBlock;
+        if (old.length > 0 && body.indexOf(old) >= 0) {
+            bodyArea.text = body.replace(old, () => block);
+        } else if (block.length > 0) {
+            const quote = draft.body ?? "";
+            const at = quote.length > 0 && body.endsWith(quote) ? body.length - quote.length : body.length;
+            bodyArea.text = body.slice(0, at) + block + body.slice(at);
+        }
+        signatureBlock = block;
     }
 
     function send() {
@@ -53,7 +80,6 @@ Rectangle {
             return;
         }
         dirty = false;
-        notify(i18n("Message queued for sending."));
         finished();
     }
 
@@ -90,6 +116,10 @@ Rectangle {
             bodyArea.forceActiveFocus();
         else
             toField.forceActiveFocus();
+        if (!(draft.signatureApplied ?? false)) {
+            signatureBlock = signatureOf(draft.accountId ?? fromBox.currentValue);
+            bodyArea.text = signatureBlock + bodyArea.text;
+        }
         bodyArea.cursorPosition = 0;
         dirty = draft.dirty ?? false;
     }
@@ -183,6 +213,7 @@ Rectangle {
                 textRole: "text"
                 valueRole: "accountId"
                 Component.onCompleted: currentIndex = Math.max(0, indexOfValue(composer.draft.accountId))
+                onActivated: composer.switchSignature(currentValue)
             }
 
             FieldLabel {

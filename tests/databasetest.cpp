@@ -49,6 +49,16 @@ private Q_SLOTS:
         QCOMPARE(b.type, AccountType::Pop3);
         QCOMPARE(b.incomingSecurity, Security::StartTls);
         QCOMPARE(b.incomingPort, 110);
+        QCOMPARE(b.signature, QString());
+
+        // Signatur ändern, ohne dass die Verbindungen neu aufgebaut werden
+        QSignalSpy changed(&reloaded, &AccountManager::accountChanged);
+        QVERIFY(reloaded.setSignature(a.id, QStringLiteral("Gruß\nTest")));
+        QCOMPARE(reloaded.account(a.id).signature, QStringLiteral("Gruß\nTest"));
+        QCOMPARE(changed.count(), 0);
+        AccountManager third;
+        third.load();
+        QCOMPARE(third.account(a.id).signature, QStringLiteral("Gruß\nTest"));
 
         QVERIFY(reloaded.remove(a.id));
         QVERIFY(!reloaded.account(a.id).isValid());

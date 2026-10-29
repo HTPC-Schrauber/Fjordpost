@@ -18,6 +18,7 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
+#include <QEventLoop>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
@@ -71,7 +72,7 @@ int main(int argc, char *argv[])
     parser.addOption(demoOption);
     parser.addOption(dataDirOption);
     parser.addOption(offlineOption);
-    QCommandLineOption devActionOption(QStringLiteral("dev-action"), i18n("Trigger a UI action before the screenshot (open-first, compose, compose-window, reply, setup, settings, light)."), i18n("action"));
+    QCommandLineOption devActionOption(QStringLiteral("dev-action"), i18n("Trigger a UI action before the screenshot (open-first, compose, compose-window, reply, setup, settings, light, undo-send)."), i18n("action"));
     parser.addOption(screenshotOption);
     parser.addOption(devActionOption);
     about.setupCommandLine(&parser);
@@ -154,5 +155,21 @@ int main(int argc, char *argv[])
         });
     }
 
-    return app.exec();
+    const int result = app.exec();
+
+    // Zurückgehaltene Nachrichten ("Senden rückgängig") nicht bis zum nächsten
+    // Start liegen lassen: jetzt senden und höchstens 30 s auf Versand und
+    // Ablage in "Gesendet" warten. Die Fenster sind dann schon geschlossen.
+    if (mail.sendDelayedNow()) {
+        QEventLoop loop;
+        QTimer poll;
+        QObject::connect(&poll, &QTimer::timeout, &loop, [&loop, &mail] {
+            if (!mail.hasPendingWork())
+                loop.quit();
+        });
+        poll.start(200);
+        QTimer::singleShot(30 * 1000, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    return result;
 }

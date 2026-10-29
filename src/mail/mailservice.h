@@ -37,7 +37,14 @@ public:
     // Legt die Nachricht in den Postausgang; Versand nach delaySeconds
     // (für "Senden rückgängig"). Liefert bei Fehlern eine Meldung.
     QString queueMessage(qint64 accountId, const OutgoingMessage &message, qint64 referenceMessage = 0,
-                         const QString &referenceKind = {}, int delaySeconds = 0);
+                         const QString &referenceKind = {}, int delaySeconds = 0, qint64 *outboxId = nullptr);
+    // Nimmt eine noch nicht versendete Nachricht aus dem Postausgang.
+    // false, wenn sie schon gesendet wird oder wurde.
+    bool cancelQueued(qint64 outboxId);
+    // Beim Beenden: Nachrichten, die nur noch für "Senden rückgängig" warten,
+    // sofort senden. Liefert true, solange noch Versand oder Ablage läuft.
+    bool sendDelayedNow();
+    bool hasPendingWork() const;
     // Entwurf auf dem Server ablegen (IMAP) bzw. lokal (POP3, M2).
     QString saveDraft(qint64 accountId, const OutgoingMessage &message);
 

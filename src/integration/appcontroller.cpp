@@ -17,6 +17,8 @@
 #include <KLocalizedString>
 #include <KTextToHTML>
 
+#include <algorithm>
+
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
@@ -566,7 +568,10 @@ QVariantList AppController::identities() const
     const auto accounts = m_accountManager->accounts();
     for (const Account &a : accounts) {
         const QString name = a.displayName.isEmpty() ? a.email : QStringLiteral("%1 <%2>").arg(a.displayName, a.email);
-        result << QVariantMap{{QStringLiteral("accountId"), a.id}, {QStringLiteral("text"), name}, {QStringLiteral("color"), a.color}};
+        result << QVariantMap{{QStringLiteral("accountId"), a.id},
+                              {QStringLiteral("text"), name},
+                              {QStringLiteral("color"), a.color},
+                              {QStringLiteral("signature"), a.signature}};
     }
     return result;
 }
@@ -694,7 +699,13 @@ QString AppController::sendMessage(const QVariantMap &data)
     const qint64 accountId = data.value(QStringLiteral("accountId")).toLongLong();
     const QString mode = data.value(QStringLiteral("mode")).toString();
     const qint64 reference = (mode == QLatin1String("new")) ? 0 : data.value(QStringLiteral("referenceId")).toLongLong();
-    return m_mail->queueMessage(accountId, outgoingFromMap(data), reference, mode == QLatin1String("forward") ? QStringLiteral("forward") : QStringLiteral("reply"));
+    const int delay = m_undoSendSeconds;
+    qint64 outboxId = 0;
+    const QString error = m_mail->queueMessage(accountId, outgoingFromMap(data), reference,
+                                               mode == QLatin1String("forward") ? QStringLiteral("forward") : QStringLiteral("reply"), delay, &outboxId);
+    if (error.isEmpty())
+        Q_EMIT messageQueued(outboxId, delay, data);
+    return error;
 }
 
 QString AppController::sendQuickReply(const QString &text)
@@ -703,8 +714,31 @@ QString AppController::sendQuickReply(const QString &text)
     if (id <= 0 || text.trimmed().isEmpty())
         return i18n("Please enter a message.");
     QVariantMap data = composeData(id, QStringLiteral("reply"));
-    data[QStringLiteral("body")] = QString(text + data.value(QStringLiteral("body")).toString());
+    const QString signature = m_accountManager->account(data.value(QStringLiteral("accountId")).toLongLong()).signature;
+    // Trenner "-- " nach RFC 3676, damit Mailprogramme die Signatur erkennen
+    const QString block = signature.trimmed().isEmpty() ? QString() : QStringLiteral("\n\n-- \n") + signature;
+    data[QStringLiteral("body")] = QString(text + block + data.value(QStringLiteral("body")).toString());
+    data[QStringLiteral("signatureApplied")] = true;
     return sendMessage(data);
+}
+
+bool AppController::cancelQueued(qint64 outboxId)
+{
+    return m_mail->cancelQueued(outboxId);
+}
+
+bool AppController::setSignature(qint64 accountId, const QString &signature)
+{
+    return m_accountManager->setSignature(accountId, signature);
+}
+
+void AppController::setUndoSendSeconds(int seconds)
+{
+    seconds = std::clamp(seconds, 0, 60);
+    if (seconds == m_undoSendSeconds)
+        return;
+    m_undoSendSeconds = seconds;
+    Q_EMIT undoSendSecondsChanged();
 }
 
 QString AppController::saveDraft(const QVariantMap &data)

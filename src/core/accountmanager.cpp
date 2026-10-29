@@ -31,6 +31,7 @@ Account accountFromQuery(const QSqlQuery &q)
     a.authMethod = authMethodFromString(q.value(QStringLiteral("auth_method")).toString());
     a.enabled = q.value(QStringLiteral("enabled")).toBool();
     a.sortOrder = q.value(QStringLiteral("sort_order")).toInt();
+    a.signature = q.value(QStringLiteral("signature")).toString();
     return a;
 }
 
@@ -58,6 +59,7 @@ void bindAccount(QSqlQuery &q, const Account &a)
     q.bindValue(QStringLiteral(":auth_method"), authMethodToString(a.authMethod));
     q.bindValue(QStringLiteral(":enabled"), a.enabled);
     q.bindValue(QStringLiteral(":sort_order"), a.sortOrder);
+    q.bindValue(QStringLiteral(":signature"), nonNull(a.signature));
 }
 
 } // namespace
@@ -95,15 +97,15 @@ Account AccountManager::save(Account account)
     if (isNew) {
         q.prepare(QStringLiteral(
             "INSERT INTO accounts (name, display_name, email, color, type, incoming_host, incoming_port, "
-            "incoming_security, outgoing_host, outgoing_port, outgoing_security, username, auth_method, enabled, sort_order) "
+            "incoming_security, outgoing_host, outgoing_port, outgoing_security, username, auth_method, enabled, sort_order, signature) "
             "VALUES (:name, :display_name, :email, :color, :type, :incoming_host, :incoming_port, "
-            ":incoming_security, :outgoing_host, :outgoing_port, :outgoing_security, :username, :auth_method, :enabled, :sort_order)"));
+            ":incoming_security, :outgoing_host, :outgoing_port, :outgoing_security, :username, :auth_method, :enabled, :sort_order, :signature)"));
     } else {
         q.prepare(QStringLiteral(
             "UPDATE accounts SET name=:name, display_name=:display_name, email=:email, color=:color, type=:type, "
             "incoming_host=:incoming_host, incoming_port=:incoming_port, incoming_security=:incoming_security, "
             "outgoing_host=:outgoing_host, outgoing_port=:outgoing_port, outgoing_security=:outgoing_security, "
-            "username=:username, auth_method=:auth_method, enabled=:enabled, sort_order=:sort_order WHERE id=:id"));
+            "username=:username, auth_method=:auth_method, enabled=:enabled, sort_order=:sort_order, signature=:signature WHERE id=:id"));
         q.bindValue(QStringLiteral(":id"), account.id);
     }
     bindAccount(q, account);
@@ -124,6 +126,21 @@ Account AccountManager::save(Account account)
         Q_EMIT accountChanged(account);
     }
     return account;
+}
+
+bool AccountManager::setSignature(qint64 id, const QString &signature)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("UPDATE accounts SET signature = :signature WHERE id = :id"));
+    q.bindValue(QStringLiteral(":signature"), nonNull(signature));
+    q.bindValue(QStringLiteral(":id"), id);
+    if (!q.exec() || q.numRowsAffected() == 0)
+        return false;
+    for (Account &a : m_accounts) {
+        if (a.id == id)
+            a.signature = signature;
+    }
+    return true;
 }
 
 bool AccountManager::remove(qint64 id)

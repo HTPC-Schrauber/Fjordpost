@@ -40,6 +40,8 @@ public:
 
     void startIdle();
     void shutdown();
+    // Laufende oder wartende Aufgaben auf der interaktiven Verbindung (z. B. APPEND)
+    bool isInteractiveBusy() const;
 
     bool isSyncing() const { return m_syncing; }
 

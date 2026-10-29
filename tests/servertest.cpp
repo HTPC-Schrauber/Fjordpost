@@ -4,6 +4,8 @@
 //   FJORDPOST_TEST_SERVER=127.0.0.1 ctest --test-dir build -R servertest --output-on-failure
 
 #include "core/accountmanager.h"
+#include "core/secretstore.h"
+#include "mail/mailservice.h"
 #include "mail/imap/imapaccount.h"
 #include "mail/mime/messagebuilder.h"
 #include "mail/mime/messageparser.h"
@@ -36,6 +38,23 @@ qint64 messageWithSubject(qint64 folderId, const QString &subject)
     q.addBindValue(subject);
     q.exec();
     return q.next() ? q.value(0).toLongLong() : 0;
+}
+
+// GreenMail akzeptiert jedes Passwort; der echte Schlüsselbund wird nicht gebraucht.
+class FakeSecretStore : public SecretStore
+{
+public:
+    void read(const QString &, ReadCallback callback) override
+    {
+        callback(true, password);
+    }
+};
+
+qint64 outboxCount()
+{
+    QSqlQuery q(Database::connection());
+    q.exec(QStringLiteral("SELECT COUNT(*) FROM outbox"));
+    return q.next() ? q.value(0).toLongLong() : -1;
 }
 
 } // namespace
@@ -221,7 +240,59 @@ private Q_SLOTS:
         QVERIFY(MailStore::location(checkId).flags & MessageFlag::Seen);
     }
 
+    // "Senden rückgängig": Rücknahme vor Ablauf und sofortiger Versand beim Beenden
+    void delayedSendCancelAndFlush()
+    {
+        const QString cancelled = QStringLiteral("Zurückgenommen %1").arg(m_tag);
+        const QString flushed = QStringLiteral("Beim Beenden %1").arg(m_tag);
+        {
+            AccountManager accounts;
+            accounts.load();
+            FakeSecretStore secrets;
+            MailService mail(&accounts, &secrets);
+            mail.start();
+
+            qint64 first = 0, second = 0;
+            QCOMPARE(mail.queueMessage(m_max.id, outgoing(cancelled), 0, {}, 60, &first), QString());
+            QCOMPARE(mail.queueMessage(m_max.id, outgoing(flushed), 0, {}, 60, &second), QString());
+            QVERIFY(first > 0 && second > 0);
+            QCOMPARE(outboxCount(), 2);
+
+            QVERIFY(mail.cancelQueued(first));
+            QVERIFY(!mail.cancelQueued(first));
+            QCOMPARE(outboxCount(), 1);
+
+            QVERIFY(mail.sendDelayedNow());
+            QTRY_VERIFY_WITH_TIMEOUT(!mail.hasPendingWork(), 30000);
+            QCOMPARE(outboxCount(), 0);
+            QVERIFY(!mail.cancelQueued(second));
+        }
+
+        QVERIFY(checkMessage(FolderRole::Inbox, flushed) > 0);
+        QCOMPARE(checkMessage(FolderRole::Inbox, cancelled), 0);
+
+        // Kopie in Max' "Gesendet" auf dem Server
+        ImapAccount max(m_max);
+        max.setCredentials(m_max, password);
+        QVERIFY(syncAndWait(max));
+        max.shutdown();
+        const qint64 sent = MailStore::folderIdForRole(m_max.id, QString::fromLatin1(FolderRole::Sent));
+        QVERIFY(sent > 0);
+        QVERIFY(messageWithSubject(sent, flushed) > 0);
+    }
+
 private:
+    OutgoingMessage outgoing(const QString &subject) const
+    {
+        OutgoingMessage m;
+        m.fromName = QStringLiteral("Max Mustermann");
+        m.fromEmail = m_max.email;
+        m.to = {QStringLiteral("Anna <anna@fjordpost.test>")};
+        m.subject = subject;
+        m.plainText = QStringLiteral("Verzögert gesendet");
+        return m;
+    }
+
     Account makeAccount(const QString &name, const QString &email)
     {
         AccountManager accounts;

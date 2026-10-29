@@ -9,5 +9,7 @@ QtObject {
         category: "Compose"
         // "inline": im Hauptfenster anstelle des Lesebereichs, "window": eigenes Fenster
         property string openIn: "inline"
+        // Wartezeit für "Senden rückgängig" in Sekunden (0 = aus)
+        property int undoSendSeconds: 10
     }
 }
