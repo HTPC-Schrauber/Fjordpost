@@ -12,6 +12,7 @@ QQC2.AbstractButton {
     property color hoverColor: Theme.textPrimary
     property real iconSize: 16
     property bool active: false
+    property bool spinning: false
     property string tooltip: text
 
     implicitWidth: Math.max(28, contentItem.implicitWidth + 12)
@@ -34,12 +35,26 @@ QQC2.AbstractButton {
         leftPadding: control.display === QQC2.AbstractButton.IconOnly ? 0 : 4
         rightPadding: leftPadding
         Kirigami.Icon {
+            id: icon
             anchors.verticalCenter: parent.verticalCenter
             width: control.iconSize
             height: control.iconSize
             source: control.iconName
             isMask: true
             color: control.active ? Theme.accent : (control.hovered ? control.hoverColor : control.iconColor)
+
+            // Nur das Symbol drehen: Es sitzt nicht in der Mitte der Schaltfläche, sie würde eiern.
+            RotationAnimation on rotation {
+                running: control.spinning
+                loops: Animation.Infinite
+                from: 0
+                to: 360
+                duration: 1200
+                onRunningChanged: {
+                    if (!running)
+                        icon.rotation = 0
+                }
+            }
         }
         QQC2.Label {
             anchors.verticalCenter: parent.verticalCenter

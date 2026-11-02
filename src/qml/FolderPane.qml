@@ -63,15 +63,8 @@ Rectangle {
                     iconSize: 14
                     tooltip: i18n("Synchronize now (F5)")
                     enabled: !App.syncing
+                    spinning: App.syncing
                     onClicked: App.syncNow()
-                    RotationAnimation on rotation {
-                        running: App.syncing
-                        loops: Animation.Infinite
-                        from: 0
-                        to: 360
-                        duration: 1200
-                        onStopped: parent.rotation = 0
-                    }
                 }
             }
 
