@@ -197,6 +197,7 @@ Vom Projektinhaber für später vorgemerkt, noch keinem Meilenstein fest zugeord
 - **Kalender ohne Server:** Bisher braucht jeder Kalender, jede Aufgabe und jeder Kontakt ein DAV-Konto;
   ein rein lokaler Speicher fehlt noch.
 - **Einzelne Termine einer Serie bearbeiten:** Bisher wirkt jede Änderung auf die ganze Serie.
+- **Mails standardmäßig nur als Text anzeigen:** Einstellung, die statt des HTML-Teils den Textteil zeigt.
 
 ## Git
 
