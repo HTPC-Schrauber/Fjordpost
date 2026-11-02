@@ -115,7 +115,12 @@ ThemedDialog {
                 Kirigami.FormData.label: i18n("Protocol:")
                 model: ["IMAP", "POP3"]
                 currentIndex: dialog.setup.pop3 ? 1 : 0
-                onActivated: index => dialog.setup.pop3 = index === 1
+                onActivated: index => {
+                    dialog.setup.pop3 = index === 1;
+                    // Standardport mitwechseln, solange er zum anderen Protokoll gehört
+                    const defaults = index === 1 ? { 993: 995, 143: 110 } : { 995: 993, 110: 143 };
+                    dialog.setup.incomingPort = defaults[dialog.setup.incomingPort] ?? dialog.setup.incomingPort;
+                }
             }
             RowLayout {
                 Kirigami.FormData.label: i18n("Server:")
@@ -137,6 +142,12 @@ ThemedDialog {
                 Kirigami.FormData.label: i18n("Security:")
                 currentIndex: dialog.setup.incomingSecurity
                 onActivated: index => dialog.setup.incomingSecurity = index
+            }
+            QQC2.CheckBox {
+                visible: dialog.setup.pop3
+                text: i18n("Leave messages on the server")
+                checked: dialog.setup.leaveOnServer
+                onToggled: dialog.setup.leaveOnServer = checked
             }
 
             Kirigami.Separator {

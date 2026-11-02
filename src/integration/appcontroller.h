@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDateTime>
 #include <QObject>
 #include <QUrl>
 #include <QVariantMap>
@@ -12,6 +13,7 @@ class AccountSetup;
 class FolderModel;
 class LabelModel;
 class MailService;
+class MailTransfer;
 class MessageListModel;
 struct OutgoingMessage;
 
@@ -43,6 +45,9 @@ class AppController : public QObject
     Q_PROPERTY(int undoSendSeconds READ undoSendSeconds WRITE setUndoSendSeconds NOTIFY undoSendSecondsChanged)
     // Eine Zeile pro Konversation; Aktionen wirken dann auf die ganze Konversation
     Q_PROPERTY(bool conversationView READ conversationView WRITE setConversationView NOTIFY conversationViewChanged)
+    // Laufender Import oder Export
+    Q_PROPERTY(bool transferBusy READ transferBusy NOTIFY transferChanged)
+    Q_PROPERTY(QString transferStatus READ transferStatus NOTIFY transferChanged)
 
 public:
     AppController(AccountManager *accounts, MailService *mail, AccountSetup *setup, QObject *parent = nullptr);
@@ -73,6 +78,15 @@ public:
     void setUndoSendSeconds(int seconds);
     bool conversationView() const { return m_conversationView; }
     void setConversationView(bool enabled);
+    bool transferBusy() const;
+    QString transferStatus() const;
+
+    struct SnoozeTime {
+        QString label;
+        QDateTime when;
+    };
+    // Vorschläge fürs Zurückstellen; öffentlich für Tests.
+    static QList<SnoozeTime> snoozeTimes(const QDateTime &now);
 
     // 0 = Unified Inbox (alle Konten)
     Q_INVOKABLE void selectAccount(qint64 accountId);
@@ -89,6 +103,30 @@ public:
     Q_INVOKABLE void archiveMessage(qint64 messageId);
     Q_INVOKABLE void allowRemoteContent();
     Q_INVOKABLE void markAllRead();
+
+    // Snooze: Zeiten in Millisekunden seit 1970 (JavaScript-Date)
+    Q_INVOKABLE QVariantList snoozeOptions() const;
+    Q_INVOKABLE void snoozeMessage(qint64 messageId, double untilMs);
+    Q_INVOKABLE void unsnoozeMessage(qint64 messageId);
+
+    // Filterregeln
+    Q_INVOKABLE QVariantList filterRules() const;
+    // Liefert eine Fehlermeldung oder einen leeren String.
+    Q_INVOKABLE QString saveFilterRule(const QVariantMap &rule);
+    Q_INVOKABLE void deleteFilterRule(qint64 ruleId);
+    Q_INVOKABLE void moveFilterRule(qint64 ruleId, int delta);
+    Q_INVOKABLE void setFilterRuleEnabled(qint64 ruleId, bool enabled);
+    // Wendet die Regel auf die vorhandenen Nachrichten der Posteingänge an.
+    Q_INVOKABLE void runFilterRule(qint64 ruleId);
+    Q_INVOKABLE QVariantList foldersOfAccount(qint64 accountId) const;
+    Q_INVOKABLE QVariantList labelChoices() const;
+
+    // Import und Export
+    Q_INVOKABLE void importInto(qint64 folderId, const QList<QUrl> &files);
+    // folderId 0: alle Ordner der Rolle im gewählten Konto bzw. in allen Konten
+    Q_INVOKABLE void exportFolder(qint64 folderId, const QString &role, const QUrl &target);
+    Q_INVOKABLE void exportMessage(qint64 messageId, const QUrl &target);
+    Q_INVOKABLE void cancelTransfer();
 
     // Labels; Fehlermeldung oder leerer String
     // assignTo > 0: das neue Label gleich dieser Nachricht (bzw. Konversation) geben
@@ -137,6 +175,7 @@ Q_SIGNALS:
     void notify(const QString &message);
     void undoSendSecondsChanged();
     void conversationViewChanged();
+    void transferChanged();
     // draft enthält die Composer-Daten, um die Nachricht nach dem Rückgängigmachen
     // wieder zu öffnen.
     void messageQueued(qint64 outboxId, int delaySeconds, const QVariantMap &draft);
@@ -164,6 +203,7 @@ private:
     FolderModel *m_folderModel;
     MessageListModel *m_messageModel;
     LabelModel *m_labelModel;
+    MailTransfer *m_transfer;
 
     qint64 m_accountId = 0;
     qint64 m_folderId = 0;

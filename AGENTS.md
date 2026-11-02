@@ -24,7 +24,8 @@ build/bin/fjordpost --demo --offline --data-dir /tmp/fjordpost-demo
   Konten `max@fjordpost.test`/`anna@fjordpost.test`, Passwort `geheim`; IMAP 3143, SMTP 3025).
   Integrationstest dagegen: `FJORDPOST_TEST_SERVER=127.0.0.1 build/bin/servertest`
   (ohne die Variable wird er übersprungen). GreenMail akzeptiert jedes Passwort und hat
-  anfangs nur `INBOX`.
+  anfangs nur `INBOX`. POP3 läuft auf 3110; TLS (3995) lehnt der Client wegen des selbst signierten
+  Zertifikats ab, der Servertest prüft genau das.
 
 ### Entwickleroptionen von `fjordpost`
 
@@ -34,7 +35,7 @@ build/bin/fjordpost --demo --offline --data-dir /tmp/fjordpost-demo
 | `--offline` | keine Serververbindungen |
 | `--data-dir <dir>` | eigenes Datenverzeichnis (echte Daten nie für Tests nutzen) |
 | `--screenshot <png>` | Fenster nach 3 s als Bild speichern und beenden (startet auch neben laufender Instanz) |
-| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light`, `undo-send`, `open-thread`, `expand-thread`, `thread-history`, `label-menu`, `label-dialog`, `label-filter` |
+| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light`, `undo-send`, `open-thread`, `expand-thread`, `thread-history`, `label-menu`, `label-dialog`, `label-filter`, `snooze-menu`, `snooze-date`, `snoozed`, `filter-rules`, `filter-rule` |
 
 Oberflächenänderungen immer per `--screenshot` prüfen und die Konsolenausgabe auf
 QML-Warnungen kontrollieren. Achtung: `--dev-action light` speichert den hellen Modus in
@@ -46,15 +47,18 @@ QML-Warnungen kontrollieren. Achtung: `--dev-action light` speichert den hellen 
 src/
   core/         Account, AccountManager (DB), SecretStore (QtKeychain → KWallet)
   storage/      Database (Migrationen, FTS5), BlobStore (.eml-Dateien), MailStore (Sync-DB-Zugriffe),
-                LabelStore (Labels, auf dem Server als IMAP-Schlüsselwörter),
+                LabelStore (Labels, auf dem Server als IMAP-Schlüsselwörter), FilterStore (Filterregeln),
                 messageflags.h (Flag-Bitmaske, Ordnerrollen), demodata
   mail/
     imap/       ImapConnection (Login + serielle Task-Queue), ImapAccount (Sync, IDLE, Offline-Ops)
-    net/        LineSocket (zeilenweise TCP/TLS-Verbindung für SMTP, später POP3)
+    pop3/       Pop3Client (Protokoll), Pop3Account (Abruf; Ordner nur lokal, Nachrichten mit uid 0)
+    net/        LineSocket (zeilenweise TCP/TLS-Verbindung für SMTP und POP3)
     smtp/       SmtpSender (eigener SMTP-Client: STARTTLS, AUTH PLAIN/LOGIN/XOAUTH2)
-    mime/       MessageParser / MessageBuilder (KMime)
+    mime/       MessageParser / MessageBuilder (KMime), Mbox (mboxrd lesen/schreiben)
     autoconfig/ AutoConfig (Anbieter-XML, .well-known, ISPDB, MX, Raten)
-    mailservice MailService: koordiniert alle Konten, Postausgang
+    mailservice MailService: koordiniert alle Konten, Postausgang, Snooze-Wecker
+    filterengine FilterEngine: wendet Regeln auf neue Nachrichten an (nur Kopfzeilen-Felder)
+    mailtransfer MailTransfer: Import/Export (.eml, mbox) nachrichtenweise im Hintergrund
   models/       AccountModel, FolderModel, MessageListModel (für QML)
   integration/  AppController (QML-Fassade "App"), AccountSetup, Notifier (KNotification,
                 Tray, Taskleisten-Zähler), RemoteContentBlocker (WebEngine)
@@ -73,6 +77,13 @@ Grundprinzipien:
 - **DB-Schema** nur über neue Einträge in `migrations[]` (`storage/database.cpp`) ändern,
   bestehende Migrationen nie anfassen. Jeder Thread nutzt `Database::connection()`.
 - **QML ↔ C++** nur über den Singleton `App` (`de.fjordblau.fjordpost.core`) und dessen Modelle.
+- **Snooze ist rein lokal** (`snooze_until`): die Nachricht bleibt auf dem Server unverändert; beim
+  Aufwecken wird sie ungelesen und `woken_at` sortiert sie nach oben. Neue Post in der Konversation weckt
+  ebenfalls (nicht eigene Mails, nicht in Papierkorb/Spam gefilterte). Verschieben beendet Snooze.
+- **Filterregeln** laufen in `MailService::handleArrived()` auf neuen Posteingang-Nachrichten
+  (Änderungen wie Benutzeraktionen über `pending_ops`); Flags vor dem Verschieben, das die UID ungültig macht.
+- **POP3:** `uid = 0`, Inhalt immer im BlobStore; `pop3_uids` merkt abgerufene Nachrichten. Erst sichern,
+  dann vermerken, dann `DELE`. `uid > 0` ist überall die Bedingung für Serveroperationen.
 - **Passwörter/Tokens** nur über `SecretStore`, nie in DB oder Konfiguration.
 
 ## Code-Konventionen
@@ -111,11 +122,16 @@ Grundprinzipien:
 - `toString()`-Überladungen für eigene Enums kollidieren mit `QCOMPARE` (ADL) → eindeutige Namen.
 - **KSMTP wird nicht verwendet:** wertet auf mehrere TCP-Pakete verteilte Antwortzeilen
   falsch aus (GreenMail) und braucht Cyrus-SASL-Plugins. Eigener Client in `mail/smtp`.
-- Fehlende Standardordner (Gesendet, Entwürfe, Papierkorb, Archiv) legt
+- Fehlende Standardordner (Gesendet, Entwürfe, Papierkorb, Archiv, Spam) legt
   `MailStore::ensureFolderForRole()` lokal an und reiht eine `create`-Operation ein –
   nie `folderIdForRole()` für Ziele von Verschieben/Ablegen verwenden.
 - Das Breeze-Icon-Theme unter WSL (5.116) ist älter; Icon-Namen vor Verwendung prüfen
   (`find /usr/share/icons/breeze -name '<name>.svg'`).
+
+- `DatePopup` aus kirigamiaddons meldet massenhaft `DatePicker.qml:570: Unable to assign double to
+  QDateTime`, sobald es erzeugt wird; die Datumswahl funktioniert trotzdem (vom Projektinhaber bestätigt).
+  Daher nur per Loader bei Bedarf laden (`SnoozeDatePicker.qml`).
+- mbox-Import: ohne Statuskopfzeile gilt eine Nachricht als gelesen; `Mbox::entry` schreibt deshalb immer `Status`.
 
 ## Design
 
@@ -137,11 +153,21 @@ Die Oberfläche folgt dem Entwurf `mopmail_ui.html` des Projektinhabers:
 |---|---|---|
 | M0 | Grundgerüst, DB, Oberfläche mit Demo-Daten | fertig |
 | M1 | IMAP + SMTP, Kontoeinrichtung, Lesen/Schreiben, Design-Umbau | fertig, Servertest grün; manueller Oberflächentest offen |
-| M2 | POP3, Threading, Snooze, Labels, Filterregeln, Signaturen, Senden rückgängig, Import/Export | begonnen: Signaturen, Senden rückgängig, Konversationen, Labels |
+| M2 | POP3, Threading, Snooze, Labels, Filterregeln, Signaturen, Senden rückgängig, Import/Export | fertig, Servertest grün (auch POP3, Filter, Import/Export); manueller Oberflächentest offen |
 | M3 | CardDAV/CalDAV, Kalender, Kontakte, Aufgaben, Einladungen | geplant |
 | M4 | Google OAuth2 (Gmail, Kontakte, Kalender) | geplant |
 | M5 | OpenPGP + S/MIME (QGpgME) | geplant |
 | M6 | Übersetzung, Einstellungen, Feinschliff, Flatpak/PKGBUILD | geplant |
+
+## Backlog
+
+Vom Projektinhaber für später vorgemerkt, noch keinem Meilenstein fest zugeordnet:
+
+- **Farbschema und Lesbarkeit überarbeiten:** Die Lesbarkeit ist insgesamt nicht ideal, der
+  Datumswähler (`SnoozeDatePicker.qml`) ist besonders schlecht lesbar.
+- **Download-Zeitraum in den Einstellungen:** wählbar, wie viel vom Server geladen wird
+  (X Tage/Wochen/Monate oder alles). Bisher fest: die neuesten `ImapAccount::initialHeaderLimit`
+  Kopfzeilen je Ordner und `prefetchCount` Inhalte im Posteingang.
 
 ## Git
 

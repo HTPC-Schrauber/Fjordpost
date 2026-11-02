@@ -66,6 +66,15 @@ ParsedMessage parseHeaders(const QByteArray &rawHead)
     return parseHeaders(message);
 }
 
+QByteArray headOf(const QByteArray &raw)
+{
+    const qsizetype lf = raw.indexOf("\n\n");
+    const qsizetype crlf = raw.indexOf("\r\n\r\n");
+    if (crlf >= 0 && (lf < 0 || crlf < lf))
+        return raw.left(crlf + 2);
+    return lf >= 0 ? raw.left(lf + 1) : raw;
+}
+
 ParsedMessage parse(const QByteArray &raw)
 {
     KMime::Message message;

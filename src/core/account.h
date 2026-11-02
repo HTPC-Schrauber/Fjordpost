@@ -33,6 +33,7 @@ struct Account {
     bool enabled = true;
     int sortOrder = 0;
     QString signature;     // Klartext ohne Trenner "-- "
+    bool leaveOnServer = true; // POP3: abgerufene Nachrichten nicht vom Server löschen
 
     bool isValid() const { return id > 0; }
     QString secretKey() const { return secretKeyFor(id); }

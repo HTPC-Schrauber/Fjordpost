@@ -25,6 +25,7 @@ inline constexpr auto Trash = "trash";
 inline constexpr auto Junk = "junk";
 inline constexpr auto Archive = "archive";
 inline constexpr auto Flagged = "flagged"; // nur virtuell (Unified-Ansicht)
+inline constexpr auto Snoozed = "snoozed"; // nur virtuell
 }
 
 } // namespace Fjordpost

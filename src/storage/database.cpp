@@ -174,6 +174,34 @@ const char *const migrations[] = {
     -- Erlaubt der Server eigene Schlüsselwörter (PERMANENTFLAGS \*)? Bis zum ersten SELECT angenommen.
     ALTER TABLE folders ADD COLUMN keywords INTEGER NOT NULL DEFAULT 1;
     )SQL",
+
+    // v6: Snooze, Filterregeln, POP3
+    R"SQL(
+    -- Zeitpunkt des Aufweckens: sortiert die Nachricht wieder nach oben, ohne ihr Datum zu ändern
+    ALTER TABLE messages ADD COLUMN woken_at INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX idx_messages_snooze ON messages(snooze_until) WHERE snooze_until > 0;
+
+    -- Bedingungen und Aktionen als JSON; account_id 0 = alle Konten
+    CREATE TABLE filter_rules (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL,
+        enabled     INTEGER NOT NULL DEFAULT 1,
+        account_id  INTEGER NOT NULL DEFAULT 0,
+        match_all   INTEGER NOT NULL DEFAULT 1,
+        conditions  TEXT NOT NULL DEFAULT '[]',
+        actions     TEXT NOT NULL DEFAULT '[]',
+        stop        INTEGER NOT NULL DEFAULT 0,
+        sort_order  INTEGER NOT NULL DEFAULT 0
+    );
+
+    ALTER TABLE accounts ADD COLUMN leave_on_server INTEGER NOT NULL DEFAULT 1;
+    -- Bereits abgerufene POP3-Nachrichten (UIDL), auch wenn sie lokal gelöscht wurden
+    CREATE TABLE pop3_uids (
+        account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        uidl        TEXT NOT NULL,
+        PRIMARY KEY (account_id, uidl)
+    );
+    )SQL",
 };
 
 constexpr int migrationCount = int(sizeof(migrations) / sizeof(migrations[0]));

@@ -2,14 +2,18 @@
 
 #include "core/accountmanager.h"
 #include "core/secretstore.h"
+#include "mail/filterengine.h"
 #include "mail/imap/imapaccount.h"
+#include "mail/pop3/pop3account.h"
 #include "mail/smtp/smtpsender.h"
 #include "storage/blobstore.h"
 #include "storage/database.h"
+#include "storage/filterstore.h"
 #include "storage/mailstore.h"
 #include "storage/messageflags.h"
 
 #include <KLocalizedString>
+#include <KMime/Util>
 #include <QDateTime>
 
 #include <algorithm>
@@ -36,12 +40,20 @@ MailService::MailService(AccountManager *accounts, SecretStore *secrets, QObject
     // Postausgang regelmäßig prüfen (verzögertes Senden, Wiederholungen).
     m_outboxTimer.setInterval(15 * 1000);
     connect(&m_outboxTimer, &QTimer::timeout, this, &MailService::processOutbox);
+
+    // Snooze ist rein lokal und läuft auch ohne Serververbindung.
+    m_snoozeTimer.setInterval(30 * 1000);
+    connect(&m_snoozeTimer, &QTimer::timeout, this, &MailService::wakeSnoozed);
+    m_snoozeTimer.start();
+    QTimer::singleShot(0, this, &MailService::wakeSnoozed);
 }
 
 MailService::~MailService()
 {
     for (ImapAccount *imap : std::as_const(m_imap))
         imap->shutdown();
+    for (Pop3Account *pop3 : std::as_const(m_pop3))
+        pop3->shutdown();
 }
 
 void MailService::start()
@@ -55,28 +67,43 @@ void MailService::start()
 
 void MailService::addAccount(const Account &account)
 {
-    if (!account.enabled || account.type != AccountType::Imap || m_imap.contains(account.id))
-        return; // POP3 folgt in M2
+    if (!account.enabled || m_imap.contains(account.id) || m_pop3.contains(account.id))
+        return;
+    if (account.type == AccountType::Pop3)
+        addPop3Account(account);
+    else
+        addImapAccount(account);
+}
 
-    auto *imap = new ImapAccount(account, this);
-    m_imap.insert(account.id, imap);
-    const qint64 id = account.id;
-
-    connect(imap, &ImapAccount::syncingChanged, this, [this, id](bool syncing) {
+template<typename T>
+void MailService::connectAccount(T *mailbox, qint64 id)
+{
+    connect(mailbox, &T::syncingChanged, this, [this, id](bool syncing) {
         if (syncing)
             m_syncing.insert(id);
         else
             m_syncing.remove(id);
         Q_EMIT syncingChanged();
     });
-    connect(imap, &ImapAccount::errorOccurred, this, [this, id](const QString &message) {
+    connect(mailbox, &T::errorOccurred, this, [this, id](const QString &message) {
         Q_EMIT errorOccurred(id, message);
     });
-    connect(imap, &ImapAccount::foldersChanged, this, [this, id] {
+    connect(mailbox, &T::foldersChanged, this, [this, id] {
         Q_EMIT foldersChanged(id);
     });
-    connect(imap, &ImapAccount::folderUpdated, this, &MailService::folderUpdated);
-    connect(imap, &ImapAccount::newMessages, this, &MailService::newMessages);
+    connect(mailbox, &T::folderUpdated, this, &MailService::folderUpdated);
+}
+
+void MailService::addImapAccount(const Account &account)
+{
+    auto *imap = new ImapAccount(account, this);
+    m_imap.insert(account.id, imap);
+    const qint64 id = account.id;
+
+    connectAccount(imap, id);
+    connect(imap, &ImapAccount::newMessages, this, [this, id](const QList<qint64> &ids) {
+        handleArrived(id, ids, true);
+    });
     connect(imap, &ImapAccount::bodyFetched, this, &MailService::bodyFetched);
 
     m_secrets->read(account.secretKey(), [this, id](bool ok, const QString &secret) {
@@ -94,13 +121,49 @@ void MailService::addAccount(const Account &account)
     });
 }
 
-void MailService::removeAccount(qint64 accountId)
+void MailService::addPop3Account(const Account &account)
+{
+    auto *pop3 = new Pop3Account(account, this);
+    m_pop3.insert(account.id, pop3);
+    const qint64 id = account.id;
+
+    connectAccount(pop3, id);
+    connect(pop3, &Pop3Account::newMessages, this, [this, id](const QList<qint64> &ids, bool notify) {
+        handleArrived(id, ids, notify);
+    });
+    pop3->ensureFolders();
+
+    m_secrets->read(account.secretKey(), [this, id](bool ok, const QString &secret) {
+        Pop3Account *pop3 = m_pop3.value(id);
+        if (!pop3)
+            return;
+        if (!ok || secret.isEmpty()) {
+            Q_EMIT errorOccurred(id, i18n("No password stored for this account."));
+            return;
+        }
+        m_secretCache.insert(id, secret);
+        pop3->setCredentials(m_accounts->account(id), secret);
+        pop3->sync();
+    });
+}
+
+void MailService::dropAccount(qint64 accountId)
 {
     if (ImapAccount *imap = m_imap.take(accountId)) {
         imap->shutdown();
         imap->deleteLater();
     }
+    if (Pop3Account *pop3 = m_pop3.take(accountId)) {
+        pop3->shutdown();
+        pop3->deleteLater();
+    }
     m_secretCache.remove(accountId);
+}
+
+void MailService::removeAccount(qint64 accountId)
+{
+    dropAccount(accountId);
+    FilterStore::removeForAccount(accountId);
     m_syncing.remove(accountId);
     m_secrets->remove(Account::secretKeyFor(accountId));
     Q_EMIT syncingChanged();
@@ -109,18 +172,62 @@ void MailService::removeAccount(qint64 accountId)
 void MailService::updateAccount(const Account &account)
 {
     // Einfach neu aufbauen: Serverdaten oder Zugangsdaten können sich geändert haben.
-    if (ImapAccount *imap = m_imap.take(account.id)) {
-        imap->shutdown();
-        imap->deleteLater();
-    }
-    m_secretCache.remove(account.id);
+    dropAccount(account.id);
     addAccount(account);
+}
+
+void MailService::handleArrived(qint64 accountId, const QList<qint64> &messageIds, bool notify)
+{
+    const FilterResult result = FilterEngine::apply(messageIds, FilterStore::rules());
+    flushPendingOps(accountId);
+    for (qint64 folder : result.folders)
+        Q_EMIT folderUpdated(folder);
+    // Beim ersten Abruf kommt alte Post, das ist keine neue Antwort.
+    if (notify)
+        markWoken(MailStore::wakeRepliedThreads(messageIds, m_accounts->account(accountId).email));
+    if (notify && !result.untouched.isEmpty())
+        Q_EMIT newMessages(result.untouched);
+}
+
+void MailService::wakeSnoozed()
+{
+    const QList<qint64> ids = MailStore::wakeSnoozed(QDateTime::currentSecsSinceEpoch());
+    if (ids.isEmpty())
+        return;
+    markWoken(ids);
+    Q_EMIT newMessages(ids);
+}
+
+void MailService::markWoken(const QList<qint64> &messageIds)
+{
+    // Wie neu angekommen: wieder ungelesen. Das gilt auch auf dem Server.
+    QSet<qint64> folders;
+    QSet<qint64> accounts;
+    for (qint64 id : messageIds) {
+        const MessageLocation loc = MailStore::location(id);
+        if (loc.id == 0)
+            continue;
+        folders.insert(loc.folderId);
+        if (!(loc.flags & MessageFlag::Seen))
+            continue;
+        MailStore::updateFlags(id, loc.flags & ~MessageFlag::Seen);
+        if (loc.uid > 0) {
+            MailStore::enqueueOp(loc.accountId, QStringLiteral("flags"), loc.folderPath, loc.uid, QStringLiteral("-\\Seen"));
+            accounts.insert(loc.accountId);
+        }
+    }
+    for (qint64 account : std::as_const(accounts))
+        flushPendingOps(account);
+    for (qint64 folder : std::as_const(folders))
+        Q_EMIT folderUpdated(folder);
 }
 
 void MailService::syncAll()
 {
     for (ImapAccount *imap : std::as_const(m_imap))
         imap->sync();
+    for (Pop3Account *pop3 : std::as_const(m_pop3))
+        pop3->sync();
     processOutbox();
 }
 
@@ -128,6 +235,8 @@ void MailService::syncAccount(qint64 accountId)
 {
     if (ImapAccount *imap = m_imap.value(accountId))
         imap->sync();
+    else if (Pop3Account *pop3 = m_pop3.value(accountId))
+        pop3->sync();
 }
 
 void MailService::syncFolder(qint64 folderId)
@@ -233,10 +342,47 @@ QString MailService::saveDraft(qint64 accountId, const OutgoingMessage &message)
     if (raw.isEmpty())
         return error;
     ImapAccount *imap = m_imap.value(accountId);
-    if (!imap)
-        return i18n("Drafts can only be saved for IMAP accounts at the moment.");
+    if (!imap) {
+        // POP3 kennt keine Serverordner.
+        const qint64 folder = m_accounts->account(accountId).type == AccountType::Pop3 ? MailStore::ensureFolderForRole(accountId, QString::fromLatin1(FolderRole::Drafts)) : 0;
+        if (folder == 0 || MailStore::insertRaw(accountId, folder, raw, MessageFlag::Seen | MessageFlag::Draft, QStringLiteral("local")) == 0)
+            return i18n("The draft could not be saved.");
+        Q_EMIT folderUpdated(folder);
+        return {};
+    }
     imap->append(QString::fromLatin1(FolderRole::Drafts), raw, {"\\Seen", "\\Draft"});
     return {};
+}
+
+bool MailService::canStoreMessages(qint64 accountId) const
+{
+    return m_imap.contains(accountId) || m_accounts->account(accountId).type == AccountType::Pop3;
+}
+
+void MailService::storeMessage(qint64 accountId, qint64 folderId, const QByteArray &raw, int flags, QObject *context, std::function<void(bool)> done)
+{
+    ImapAccount *imap = m_imap.value(accountId);
+    if (!imap) {
+        done(MailStore::insertRaw(accountId, folderId, raw, flags, QStringLiteral("local")) > 0);
+        return;
+    }
+    // Ohne Anmeldung leert ImapConnection die Warteschlange, der Rückruf bliebe dann aus.
+    auto answered = std::make_shared<bool>(false);
+    auto once = [answered, done](bool ok) {
+        if (*answered)
+            return;
+        *answered = true;
+        done(ok);
+    };
+    auto connection = std::make_shared<QMetaObject::Connection>();
+    *connection = connect(imap, &ImapAccount::errorOccurred, context, [once, connection] {
+        QObject::disconnect(*connection);
+        once(false);
+    });
+    imap->appendToFolder(MailStore::folder(folderId).path, KMime::LFtoCRLF(raw), MailStore::imapFlagsFor(flags), [once, connection](bool ok) {
+        QObject::disconnect(*connection);
+        once(ok);
+    });
 }
 
 bool MailService::sendDelayedNow()
@@ -322,8 +468,13 @@ void MailService::afterSent(qint64 outboxId, qint64 accountId, const QByteArray 
     const Account account = m_accounts->account(accountId);
     // Gmail legt gesendete Nachrichten selbst im Ordner "Gesendet" ab.
     const bool serverSavesSent = account.outgoingHost.endsWith(QLatin1String("gmail.com"));
-    if (ImapAccount *imap = m_imap.value(accountId); imap && !serverSavesSent)
+    if (ImapAccount *imap = m_imap.value(accountId); imap && !serverSavesSent) {
         imap->append(QString::fromLatin1(FolderRole::Sent), raw, {"\\Seen"});
+    } else if (account.type == AccountType::Pop3) {
+        const qint64 sent = MailStore::ensureFolderForRole(accountId, QString::fromLatin1(FolderRole::Sent));
+        if (sent > 0 && MailStore::insertRaw(accountId, sent, raw, MessageFlag::Seen, QStringLiteral("local")) > 0)
+            Q_EMIT folderUpdated(sent);
+    }
 
     // Bezugsnachricht als beantwortet/weitergeleitet markieren.
     if (referenceMessage > 0) {

@@ -39,7 +39,7 @@ C++20 · Qt 6 · KDE Frameworks 6 · Kirigami · SQLite
 |---|---|---|
 | M0 | Grundgerüst, Datenbank, Oberfläche mit Demo-Daten | ✅ |
 | M1 | IMAP + SMTP, Kontoeinrichtung, Lesen/Schreiben | ✅ |
-| M2 | Signaturen, Senden rückgängig, Konversationen, Labels, Snooze, Filterregeln, POP3, Import/Export | in Arbeit (die ersten vier ✅) |
+| M2 | Signaturen, Senden rückgängig, Konversationen, Labels, Snooze, Filterregeln, POP3, Import/Export | fertig ✅ |
 | M3 | CardDAV / CalDAV: Kalender, Kontakte, Aufgaben, Einladungen | geplant |
 | M4 | Google (OAuth2 für Gmail, Kontakte, Kalender) | geplant |
 | M5 | OpenPGP + S/MIME | geplant |

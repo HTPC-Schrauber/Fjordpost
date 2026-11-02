@@ -47,6 +47,9 @@ ParsedMessage parseHeaders(const KMime::Message &message);
 // Wie oben, aber aus dem rohen Kopfbereich (CRLF oder LF).
 ParsedMessage parseHeaders(const QByteArray &rawHead);
 
+// Kopfbereich einer rohen Nachricht (CRLF oder LF).
+QByteArray headOf(const QByteArray &raw);
+
 // Vollständige Nachricht inklusive Text, HTML und Anhängen.
 ParsedMessage parse(const QByteArray &raw);
 

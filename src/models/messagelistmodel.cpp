@@ -135,7 +135,8 @@ MessageListModel::Row MessageListModel::rowFromQuery(const QSqlQuery &q)
     r.fromName = q.value(2).toString();
     r.fromEmail = q.value(3).toString();
     r.date = QDateTime::fromSecsSinceEpoch(q.value(4).toLongLong());
-    r.groupDate = r.date;
+    // Aufgeweckte Nachrichten gehören in die Gruppe ihres Weckzeitpunkts.
+    r.groupDate = QDateTime::fromSecsSinceEpoch(std::max(q.value(4).toLongLong(), q.value(16).toLongLong()));
     r.snippet = q.value(5).toString();
     r.flags = q.value(6).toInt();
     r.hasAttachments = q.value(7).toBool();
@@ -148,6 +149,7 @@ MessageListModel::Row MessageListModel::rowFromQuery(const QSqlQuery &q)
     const auto labelIds = q.value(14).toString().split(QLatin1Char(','), Qt::SkipEmptyParts);
     for (const QString &id : labelIds)
         r.labelIds << id.toLongLong();
+    r.snoozeUntil = q.value(15).toLongLong();
     return r;
 }
 
@@ -159,7 +161,8 @@ QList<MessageListModel::Row> MessageListModel::withChildren(const QList<Row> &to
     QSqlQuery q(Database::connection());
     q.prepare(QStringLiteral("SELECT m.id, m.subject, m.from_name, m.from_email, m.date, m.snippet, m.flags, m.has_attachments, a.color, "
                              "f.name, m.thread_id, f.role, 1, (m.flags & %1) = 0, "
-                             "(SELECT GROUP_CONCAT(label_id) FROM message_labels WHERE message_id = m.id) FROM messages m JOIN folders f ON f.id = m.folder_id "
+                             "(SELECT GROUP_CONCAT(label_id) FROM message_labels WHERE message_id = m.id), m.snooze_until, m.woken_at "
+                             "FROM messages m JOIN folders f ON f.id = m.folder_id "
                              "JOIN accounts a ON a.id = m.account_id WHERE m.id = ?")
                   .arg(MessageFlag::Seen));
     QList<Row> result;
@@ -218,10 +221,15 @@ QList<MessageListModel::Row> MessageListModel::fetchPage(int offset, int limit) 
     } else if (m_filter.role == QLatin1String(FolderRole::Flagged)) {
         where << QStringLiteral("(m.flags & %1) != 0").arg(MessageFlag::Flagged);
         where << QStringLiteral("f.role NOT IN ('trash', 'junk')");
+    } else if (m_filter.role == QLatin1String(FolderRole::Snoozed)) {
+        where << QStringLiteral("m.snooze_until > 0");
     } else {
         where << QStringLiteral("f.role = ?");
         binds << (m_filter.role.isEmpty() ? QString::fromLatin1(FolderRole::Inbox) : m_filter.role);
     }
+    // Zurückgestellte Nachrichten bleiben über die Suche auffindbar.
+    if (search.isEmpty() && m_filter.role != QLatin1String(FolderRole::Snoozed))
+        where << QStringLiteral("m.snooze_until = 0");
     if (m_filter.accountId > 0) {
         where << QStringLiteral("m.account_id = ?");
         binds << m_filter.accountId;
@@ -237,14 +245,18 @@ QList<MessageListModel::Row> MessageListModel::fetchPage(int offset, int limit) 
 
     const QString columns = QStringLiteral("m.id, m.subject, m.from_name, m.from_email, m.date, m.snippet, m.flags, m.has_attachments, a.color, f.name, "
                                            "m.thread_id, f.role");
+    // Aufgeweckte Nachrichten stehen oben; "Zurückgestellt" zeigt die nächste Weckzeit zuerst.
+    const QString order = m_filter.role == QLatin1String(FolderRole::Snoozed) && search.isEmpty() ? QStringLiteral("m.snooze_until, m.id")
+                                                                                                  : QStringLiteral("MAX(m.date, m.woken_at) DESC");
     QString sql;
     if (!m_filter.threaded) {
-        sql = QStringLiteral("SELECT %1, 1, (m.flags & %2) = 0, (SELECT GROUP_CONCAT(label_id) FROM message_labels WHERE message_id = m.id) "
+        sql = QStringLiteral("SELECT %1, 1, (m.flags & %2) = 0, (SELECT GROUP_CONCAT(label_id) FROM message_labels WHERE message_id = m.id), "
+                             "m.snooze_until, m.woken_at "
                              "FROM messages m JOIN folders f ON f.id = m.folder_id "
-                             "JOIN accounts a ON a.id = m.account_id WHERE %3 ORDER BY m.date DESC")
+                             "JOIN accounts a ON a.id = m.account_id WHERE %3 ORDER BY %4")
                   .arg(columns)
                   .arg(MessageFlag::Seen)
-                  .arg(condition);
+                  .arg(condition, order);
     } else {
         // Pro Konversation die neueste passende Nachricht; Anzahl und Ungelesene zählen
         // die ganze Konversation (ohne Papierkorb/Spam, außer man ist dort).
@@ -253,17 +265,18 @@ QList<MessageListModel::Row> MessageListModel::fetchPage(int offset, int limit) 
                                         "AND t.account_id = m.account_id AND (t.flags & %1) = 0 AND (tf.role NOT IN ('trash', 'junk') OR tf.role = f.role)")
                                         .arg(MessageFlag::Deleted);
         sql = QStringLiteral(
-                  "WITH matching AS (SELECT m.id, m.thread_id, m.date FROM messages m JOIN folders f ON f.id = m.folder_id WHERE %1), "
+                  "WITH matching AS (SELECT m.id, m.thread_id, MAX(m.date, m.woken_at) AS date FROM messages m JOIN folders f ON f.id = m.folder_id WHERE %1), "
                   "latest AS (SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY date DESC, id DESC) AS rn "
                   "FROM matching) WHERE rn = 1) "
                   "SELECT %2, (SELECT COUNT(*) %3), (SELECT COUNT(*) %3 AND (t.flags & %4) = 0), "
                   // Labels aller Nachrichten der Konversation
                   "(SELECT GROUP_CONCAT(DISTINCT ml.label_id) FROM message_labels ml JOIN messages t ON t.id = ml.message_id "
-                  "WHERE t.thread_id = m.thread_id AND t.account_id = m.account_id) "
+                  "WHERE t.thread_id = m.thread_id AND t.account_id = m.account_id), m.snooze_until, m.woken_at "
                   "FROM latest l JOIN messages m ON m.id = l.id JOIN folders f ON f.id = m.folder_id "
-                  "JOIN accounts a ON a.id = m.account_id ORDER BY m.date DESC")
+                  "JOIN accounts a ON a.id = m.account_id ORDER BY %5")
                   .arg(condition, columns, threadScope)
-                  .arg(MessageFlag::Seen);
+                  .arg(MessageFlag::Seen)
+                  .arg(order);
     }
     sql += QStringLiteral(" LIMIT %1 OFFSET %2").arg(limit).arg(offset);
 
@@ -402,6 +415,8 @@ QVariant MessageListModel::data(const QModelIndex &index, int role) const
         return r.sent;
     case LabelsRole:
         return labelsFor(r);
+    case SnoozedUntilRole:
+        return r.snoozeUntil > 0 ? QLocale().toString(QDateTime::fromSecsSinceEpoch(r.snoozeUntil), QLocale::ShortFormat) : QString();
     }
     return {};
 }
@@ -429,6 +444,7 @@ QHash<int, QByteArray> MessageListModel::roleNames() const
         {IsChildRole, "isChild"},
         {SentRole, "sent"},
         {LabelsRole, "labels"},
+        {SnoozedUntilRole, "snoozedUntil"},
     };
 }
 

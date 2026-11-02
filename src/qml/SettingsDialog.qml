@@ -9,6 +9,8 @@ import "components"
 ThemedDialog {
     id: dialog
 
+    signal filterRulesRequested()
+
     title: i18n("Settings")
     preferredWidth: Kirigami.Units.gridUnit * 30
     standardButtons: Kirigami.Dialog.Close
@@ -78,6 +80,16 @@ ThemedDialog {
             text: i18n("Group messages into conversations")
             checked: Prefs.view.conversations
             onToggled: Prefs.view.conversations = checked
+        }
+
+        QQC2.Button {
+            Kirigami.FormData.label: i18n("Incoming mail:")
+            text: i18n("Filter Rules…")
+            icon.name: "view-filter"
+            onClicked: {
+                dialog.close();
+                dialog.filterRulesRequested();
+            }
         }
 
         Kirigami.Separator {

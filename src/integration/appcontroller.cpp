@@ -3,7 +3,9 @@
 #include "core/accountmanager.h"
 #include "integration/accountsetup.h"
 #include "integration/colorscheme.h"
+#include "mail/filterengine.h"
 #include "mail/mailservice.h"
+#include "mail/mailtransfer.h"
 #include "mail/mime/messagebuilder.h"
 #include "mail/mime/messageparser.h"
 #include "models/accountmodel.h"
@@ -12,6 +14,7 @@
 #include "models/messagelistmodel.h"
 #include "storage/blobstore.h"
 #include "storage/database.h"
+#include "storage/filterstore.h"
 #include "storage/labelstore.h"
 #include "storage/mailstore.h"
 #include "storage/messageflags.h"
@@ -130,6 +133,7 @@ AppController::AppController(AccountManager *accounts, MailService *mail, Accoun
     , m_folderModel(new FolderModel(this))
     , m_messageModel(new MessageListModel(this))
     , m_labelModel(new LabelModel(this))
+    , m_transfer(new MailTransfer(mail, accounts, this))
 {
     m_role = QString::fromLatin1(FolderRole::Inbox);
     m_title = i18n("All Inboxes");
@@ -174,6 +178,15 @@ AppController::AppController(AccountManager *accounts, MailService *mail, Accoun
     });
     connect(mail, &MailService::messageSent, this, [this](qint64, const QString &subject) {
         Q_EMIT notify(i18n("Message \"%1\" sent.", subject));
+    });
+    connect(m_transfer, &MailTransfer::busyChanged, this, &AppController::transferChanged);
+    connect(m_transfer, &MailTransfer::statusChanged, this, &AppController::transferChanged);
+    connect(m_transfer, &MailTransfer::finished, this, [this](const QString &summary, qint64 folderId) {
+        Q_EMIT notify(summary);
+        if (folderId > 0) {
+            m_messageModel->refresh();
+            refreshCounts();
+        }
     });
 }
 
@@ -341,7 +354,7 @@ void AppController::refreshCounts()
 
     QSqlQuery q(Database::connection());
     q.prepare(QStringLiteral("SELECT COUNT(*) FROM messages m JOIN folders f ON f.id = m.folder_id "
-                             "WHERE f.role = 'inbox' AND (m.flags & ?) = 0"));
+                             "WHERE f.role = 'inbox' AND (m.flags & ?) = 0 AND m.snooze_until = 0"));
     q.addBindValue(int(MessageFlag::Seen));
     q.exec();
     const int unread = q.next() ? q.value(0).toInt() : 0;
@@ -369,7 +382,7 @@ void AppController::loadCurrent(qint64 messageId)
     QSqlQuery q(Database::connection());
     q.prepare(QStringLiteral(
         "SELECT m.id, m.subject, m.from_name, m.from_email, m.to_list, m.cc_list, m.date, m.flags, m.body_text, "
-        "a.name, a.color, m.blob_path, m.body_fetched, m.uid FROM messages m JOIN accounts a ON a.id = m.account_id WHERE m.id = ?"));
+        "a.name, a.color, m.blob_path, m.body_fetched, m.uid, m.snooze_until FROM messages m JOIN accounts a ON a.id = m.account_id WHERE m.id = ?"));
     q.addBindValue(messageId);
     q.exec();
     if (!q.next()) {
@@ -383,6 +396,7 @@ void AppController::loadCurrent(qint64 messageId)
     const QString blobPath = q.value(11).toString();
     const bool bodyFetched = q.value(12).toBool();
     const qint64 uid = q.value(13).toLongLong();
+    const qint64 snoozeUntil = q.value(14).toLongLong();
 
     m_current = {
         {QStringLiteral("id"), q.value(0)},
@@ -402,6 +416,7 @@ void AppController::loadCurrent(qint64 messageId)
         {QStringLiteral("folderName"), folderDisplayName(messageId)},
         {QStringLiteral("thread"), threadEntries(messageId)},
         {QStringLiteral("labels"), labelsOfCurrent(messageId)},
+        {QStringLiteral("snoozedUntil"), snoozeUntil > 0 ? mediumDate(QDateTime::fromSecsSinceEpoch(snoozeUntil)) : QString()},
     };
 
     if (bodyFetched && !blobPath.isEmpty()) {
@@ -547,6 +562,244 @@ void AppController::markAllRead()
         ids << (m_conversationView ? MailStore::threadMessages(id) : QList<qint64>{id});
     }
     applyRead(ids, true);
+}
+
+// ------------------------------------------------------------------ Snooze
+
+QList<AppController::SnoozeTime> AppController::snoozeTimes(const QDateTime &now)
+{
+    QList<SnoozeTime> result;
+    const QDate today = now.date();
+    const QTime morning(8, 0);
+
+    if (const QDateTime later = now.addSecs(3 * 3600); later.date() == today)
+        result << SnoozeTime{i18n("Later today"), later};
+    if (const QDateTime evening(today, QTime(18, 0)); now.secsTo(evening) >= 3600)
+        result << SnoozeTime{i18n("This evening"), evening};
+    result << SnoozeTime{i18n("Tomorrow"), QDateTime(today.addDays(1), morning)};
+    // Samstag nur anbieten, wenn er nicht ohnehin "morgen" ist.
+    if (today.dayOfWeek() < Qt::Friday)
+        result << SnoozeTime{i18n("This weekend"), QDateTime(today.addDays(Qt::Saturday - today.dayOfWeek()), morning)};
+    result << SnoozeTime{i18n("Next week"), QDateTime(today.addDays(8 - today.dayOfWeek()), morning)};
+    return result;
+}
+
+QVariantList AppController::snoozeOptions() const
+{
+    QVariantList result;
+    const auto times = snoozeTimes(QDateTime::currentDateTime());
+    for (const SnoozeTime &t : times) {
+        result << QVariantMap{{QStringLiteral("text"), t.label},
+                              {QStringLiteral("hint"), mediumDate(t.when)},
+                              {QStringLiteral("time"), double(t.when.toMSecsSinceEpoch())}};
+    }
+    return result;
+}
+
+void AppController::snoozeMessage(qint64 messageId, double untilMs)
+{
+    const qint64 until = qint64(untilMs / 1000);
+    if (until <= QDateTime::currentSecsSinceEpoch()) {
+        Q_EMIT notify(i18n("Please choose a time in the future."));
+        return;
+    }
+    const QList<qint64> ids = affectedMessages(messageId);
+    MailStore::setSnooze(ids, until);
+    m_messageModel->refresh();
+    if (ids.contains(m_current.value(QStringLiteral("id")).toLongLong())) {
+        m_current.clear();
+        Q_EMIT currentMessageChanged();
+    }
+    refreshCounts();
+    Q_EMIT notify(i18n("Snoozed until %1.", mediumDate(QDateTime::fromSecsSinceEpoch(until))));
+}
+
+void AppController::unsnoozeMessage(qint64 messageId)
+{
+    const QList<qint64> ids = affectedMessages(messageId);
+    MailStore::setSnooze(ids, 0);
+    m_messageModel->refresh();
+    if (ids.contains(m_current.value(QStringLiteral("id")).toLongLong()))
+        loadCurrent(m_current.value(QStringLiteral("id")).toLongLong());
+    refreshCounts();
+}
+
+// ----------------------------------------------------------- Filterregeln
+
+QVariantList AppController::filterRules() const
+{
+    QVariantList result;
+    const auto rules = FilterStore::rules();
+    for (const FilterRule &r : rules) {
+        QVariantList conditions;
+        for (const FilterCondition &c : r.conditions)
+            conditions << QVariantMap{{QStringLiteral("field"), c.field}, {QStringLiteral("op"), c.op}, {QStringLiteral("value"), c.value}};
+        QVariantList actions;
+        for (const FilterAction &a : r.actions)
+            actions << QVariantMap{{QStringLiteral("type"), a.type}, {QStringLiteral("argument"), a.argument}};
+        result << QVariantMap{{QStringLiteral("id"), r.id},
+                              {QStringLiteral("name"), r.name},
+                              {QStringLiteral("enabled"), r.enabled},
+                              {QStringLiteral("accountId"), r.accountId},
+                              {QStringLiteral("matchAll"), r.matchAll},
+                              {QStringLiteral("conditions"), conditions},
+                              {QStringLiteral("actions"), actions},
+                              {QStringLiteral("stop"), r.stop}};
+    }
+    return result;
+}
+
+QString AppController::saveFilterRule(const QVariantMap &map)
+{
+    FilterRule r;
+    r.id = map.value(QStringLiteral("id")).toLongLong();
+    r.name = map.value(QStringLiteral("name")).toString().trimmed();
+    r.enabled = map.value(QStringLiteral("enabled"), true).toBool();
+    r.accountId = map.value(QStringLiteral("accountId")).toLongLong();
+    r.matchAll = map.value(QStringLiteral("matchAll"), true).toBool();
+    r.stop = map.value(QStringLiteral("stop")).toBool();
+    for (const QVariant &v : map.value(QStringLiteral("conditions")).toList()) {
+        const QVariantMap c = v.toMap();
+        const QString value = c.value(QStringLiteral("value")).toString().trimmed();
+        if (!value.isEmpty())
+            r.conditions << FilterCondition{c.value(QStringLiteral("field")).toString(), c.value(QStringLiteral("op")).toString(), value};
+    }
+    for (const QVariant &v : map.value(QStringLiteral("actions")).toList()) {
+        const QVariantMap a = v.toMap();
+        const FilterAction action{a.value(QStringLiteral("type")).toString(), a.value(QStringLiteral("argument")).toString()};
+        const bool needsArgument = action.type == QLatin1String("label") || action.type == QLatin1String("move");
+        if (!needsArgument || !action.argument.isEmpty())
+            r.actions << action;
+    }
+    if (r.name.isEmpty())
+        return i18n("Please enter a name.");
+    if (r.conditions.isEmpty())
+        return i18n("Please enter at least one condition.");
+    if (r.actions.isEmpty())
+        return i18n("Please choose at least one action.");
+    return FilterStore::save(r) > 0 ? QString() : i18n("The rule could not be saved.");
+}
+
+void AppController::deleteFilterRule(qint64 ruleId)
+{
+    FilterStore::remove(ruleId);
+}
+
+void AppController::moveFilterRule(qint64 ruleId, int delta)
+{
+    FilterStore::move(ruleId, delta);
+}
+
+void AppController::setFilterRuleEnabled(qint64 ruleId, bool enabled)
+{
+    FilterRule r = FilterStore::rule(ruleId);
+    if (r.id == 0)
+        return;
+    r.enabled = enabled;
+    FilterStore::save(r);
+}
+
+void AppController::runFilterRule(qint64 ruleId)
+{
+    FilterRule rule = FilterStore::rule(ruleId);
+    if (rule.id == 0)
+        return;
+    rule.enabled = true; // ausdrücklich angestoßen
+
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT m.id FROM messages m JOIN folders f ON f.id = m.folder_id "
+                             "WHERE f.role = 'inbox' AND (m.flags & ?) = 0 AND (? = 0 OR m.account_id = ?)"));
+    q.addBindValue(int(MessageFlag::Deleted));
+    q.addBindValue(rule.accountId);
+    q.addBindValue(rule.accountId);
+    q.exec();
+    QList<qint64> ids;
+    while (q.next())
+        ids << q.value(0).toLongLong();
+
+    const FilterResult result = FilterEngine::apply(ids, {rule});
+    for (qint64 account : result.accounts)
+        m_mail->flushPendingOps(account);
+    m_messageModel->refresh();
+    refreshCounts();
+    const qint64 current = m_current.value(QStringLiteral("id")).toLongLong();
+    if (current > 0)
+        loadCurrent(current);
+    Q_EMIT notify(i18np("The rule matched %1 message.", "The rule matched %1 messages.", result.matched));
+}
+
+QVariantList AppController::foldersOfAccount(qint64 accountId) const
+{
+    QVariantList result;
+    const auto folders = MailStore::folders(accountId);
+    for (const FolderState &f : folders)
+        result << QVariantMap{{QStringLiteral("text"), f.path}, {QStringLiteral("value"), f.path}};
+    return result;
+}
+
+QVariantList AppController::labelChoices() const
+{
+    QVariantList result;
+    const auto labels = LabelStore::labels();
+    for (const Label &l : labels)
+        result << QVariantMap{{QStringLiteral("text"), l.name}, {QStringLiteral("value"), QString::number(l.id)}};
+    return result;
+}
+
+// --------------------------------------------------------- Import und Export
+
+bool AppController::transferBusy() const
+{
+    return m_transfer->isBusy();
+}
+
+QString AppController::transferStatus() const
+{
+    return m_transfer->status();
+}
+
+void AppController::importInto(qint64 folderId, const QList<QUrl> &files)
+{
+    QStringList paths;
+    for (const QUrl &url : files)
+        paths << url.toLocalFile();
+    const QString error = m_transfer->startImport(folderId, paths);
+    if (!error.isEmpty())
+        Q_EMIT notify(error);
+}
+
+void AppController::exportFolder(qint64 folderId, const QString &role, const QUrl &target)
+{
+    QSqlQuery q(Database::connection());
+    if (folderId > 0) {
+        q.prepare(QStringLiteral("SELECT id FROM messages WHERE folder_id = ? ORDER BY date"));
+        q.addBindValue(folderId);
+    } else {
+        q.prepare(QStringLiteral("SELECT m.id FROM messages m JOIN folders f ON f.id = m.folder_id "
+                                 "WHERE f.role = ? AND (? = 0 OR m.account_id = ?) ORDER BY m.date"));
+        q.addBindValue(role);
+        q.addBindValue(m_accountId);
+        q.addBindValue(m_accountId);
+    }
+    q.exec();
+    QList<qint64> ids;
+    while (q.next())
+        ids << q.value(0).toLongLong();
+    const QString error = m_transfer->startExport(ids, target.toLocalFile(), false);
+    if (!error.isEmpty())
+        Q_EMIT notify(error);
+}
+
+void AppController::exportMessage(qint64 messageId, const QUrl &target)
+{
+    const QString error = m_transfer->startExport({messageId}, target.toLocalFile(), true);
+    if (!error.isEmpty())
+        Q_EMIT notify(error);
+}
+
+void AppController::cancelTransfer()
+{
+    m_transfer->cancel();
 }
 
 // ------------------------------------------------------------------ Labels

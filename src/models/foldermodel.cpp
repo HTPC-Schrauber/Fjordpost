@@ -1,10 +1,13 @@
 #include "foldermodel.h"
 
 #include "storage/database.h"
+#include "storage/mailstore.h"
 #include "storage/messageflags.h"
 
 #include <KLocalizedString>
 #include <QSqlQuery>
+
+#include <algorithm>
 
 namespace Fjordpost {
 
@@ -24,6 +27,8 @@ QString iconForFolderRole(const QString &role)
         return QStringLiteral("archive-insert");
     if (role == QLatin1String(FolderRole::Flagged))
         return QStringLiteral("flag");
+    if (role == QLatin1String(FolderRole::Snoozed))
+        return QStringLiteral("chronometer");
     return QStringLiteral("folder-mail");
 }
 
@@ -53,6 +58,7 @@ void FolderModel::reload()
         const QList<QPair<QString, QString>> virtualFolders = {
             {QLatin1String(FolderRole::Inbox), i18n("All Inboxes")},
             {QLatin1String(FolderRole::Flagged), i18n("Flagged")},
+            {QLatin1String(FolderRole::Snoozed), i18n("Snoozed")},
             {QLatin1String(FolderRole::Drafts), i18n("Drafts")},
             {QLatin1String(FolderRole::Sent), i18n("Sent")},
             {QLatin1String(FolderRole::Archive), i18n("Archive")},
@@ -65,17 +71,19 @@ void FolderModel::reload()
             e.name = name;
             if (role == QLatin1String(FolderRole::Inbox)) {
                 q.prepare(QStringLiteral("SELECT COUNT(*) FROM messages m JOIN folders f ON f.id = m.folder_id "
-                                         "WHERE f.role = 'inbox' AND (m.flags & ?) = 0"));
+                                         "WHERE f.role = 'inbox' AND (m.flags & ?) = 0 AND m.snooze_until = 0"));
                 q.addBindValue(int(MessageFlag::Seen));
                 q.exec();
                 e.unread = q.next() ? q.value(0).toInt() : 0;
+            } else if (role == QLatin1String(FolderRole::Snoozed)) {
+                e.unread = MailStore::snoozedCount(0);
             }
             m_entries << e;
         }
     } else {
         q.prepare(QStringLiteral(
             "SELECT f.id, f.name, f.role, "
-            "(SELECT COUNT(*) FROM messages m WHERE m.folder_id = f.id AND (m.flags & ?) = 0) "
+            "(SELECT COUNT(*) FROM messages m WHERE m.folder_id = f.id AND (m.flags & ?) = 0 AND m.snooze_until = 0) "
             "FROM folders f WHERE f.account_id = ? ORDER BY f.sort_order, f.name"));
         q.addBindValue(int(MessageFlag::Seen));
         q.addBindValue(m_accountId);
@@ -87,6 +95,14 @@ void FolderModel::reload()
             e.role = q.value(2).toString();
             e.unread = q.value(3).toInt();
             m_entries << e;
+        }
+        // Eigener Eintrag nur, wenn etwas wartet: Konten zeigen sonst nur echte Ordner.
+        if (const int snoozed = MailStore::snoozedCount(m_accountId); snoozed > 0) {
+            Entry e;
+            e.role = QLatin1String(FolderRole::Snoozed);
+            e.name = i18n("Snoozed");
+            e.unread = snoozed;
+            m_entries.insert(std::min<qsizetype>(1, m_entries.size()), e);
         }
     }
     endResetModel();

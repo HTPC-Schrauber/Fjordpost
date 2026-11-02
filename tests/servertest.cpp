@@ -7,11 +7,15 @@
 #include "core/secretstore.h"
 #include "mail/mailservice.h"
 #include "mail/imap/imapaccount.h"
+#include "mail/mailtransfer.h"
+#include "mail/mime/mbox.h"
 #include "mail/mime/messagebuilder.h"
 #include "mail/mime/messageparser.h"
+#include "mail/pop3/pop3account.h"
 #include "mail/smtp/smtpsender.h"
 #include "storage/blobstore.h"
 #include "storage/database.h"
+#include "storage/filterstore.h"
 #include "storage/labelstore.h"
 #include "storage/mailstore.h"
 #include "storage/messageflags.h"
@@ -324,7 +328,338 @@ private Q_SLOTS:
         QVERIFY(messageWithSubject(sent, flushed) > 0);
     }
 
+    // Abruf über POP3: eigenes Postfach, damit DELE die übrigen Tests nicht berührt
+    void pop3FetchesAndDeletes()
+    {
+        const QString address = QStringLiteral("pop-%1@fjordpost.test").arg(m_tag);
+        const Account account = makePop3Account(address, 3110, Security::None, false);
+        const QString first = QStringLiteral("POP eins %1").arg(m_tag);
+        QVERIFY(sendTo(address, first, QStringLiteral("Grüße über POP3\n.Zeile mit Punkt")));
+
+        Pop3Account pop3(account);
+        pop3.setCredentials(account, password);
+        pop3.ensureFolders();
+        const qint64 inbox = MailStore::folderIdForRole(account.id, QString::fromLatin1(FolderRole::Inbox));
+        QSignalSpy errors(&pop3, &Pop3Account::errorOccurred);
+        const auto fetched = [&](const QString &subject) {
+            return syncPop3(pop3) && messageWithSubject(inbox, subject) > 0;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(fetched(first), 15000);
+        QVERIFY2(errors.isEmpty(), errors.isEmpty() ? "" : qPrintable(errors.first().first().toString()));
+
+        const MessageLocation loc = MailStore::location(messageWithSubject(inbox, first));
+        QCOMPARE(loc.uid, 0);
+        QVERIFY(loc.bodyFetched);
+        const ParsedMessage parsed = MessageParser::parse(BlobStore::load(loc.blobPath));
+        QVERIFY2(parsed.plainText.contains(QStringLiteral("Grüße über POP3\n.Zeile mit Punkt")), qPrintable(parsed.plainText));
+
+        // Nach dem Löschen ist das Postfach leer: ein neuer Abruf bringt nur die neue Mail.
+        const QString second = QStringLiteral("POP zwei %1").arg(m_tag);
+        QVERIFY(sendTo(address, second, QStringLiteral("Noch eine")));
+        QTRY_VERIFY_WITH_TIMEOUT(fetched(second), 15000);
+        QVERIFY(MailStore::pop3KnownUids(account.id).size() <= 2);
+        QVERIFY(errors.isEmpty());
+        QCOMPARE(countIn(inbox), 2);
+    }
+
+    void pop3LeavesMailOnServer()
+    {
+        const QString address = QStringLiteral("stay-%1@fjordpost.test").arg(m_tag);
+        const Account account = makePop3Account(address, 3110, Security::None, true);
+        const QString subject = QStringLiteral("POP bleibt %1").arg(m_tag);
+        QVERIFY(sendTo(address, subject, QStringLiteral("Bleibt liegen")));
+
+        Pop3Account pop3(account);
+        pop3.setCredentials(account, password);
+        pop3.ensureFolders();
+        const qint64 inbox = MailStore::folderIdForRole(account.id, QString::fromLatin1(FolderRole::Inbox));
+        const auto fetched = [&] {
+            return syncPop3(pop3) && messageWithSubject(inbox, subject) > 0;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(fetched(), 15000);
+        QVERIFY(syncPop3(pop3));
+        QCOMPARE(countIn(inbox), 1); // nicht doppelt
+
+        // Zweites Gerät: die Nachricht liegt noch auf dem Server
+        const Account other = makePop3Account(address, 3110, Security::None, true);
+        Pop3Account second(other);
+        second.setCredentials(other, password);
+        second.ensureFolders();
+        QVERIFY(syncPop3(second));
+        QVERIFY(messageWithSubject(MailStore::folderIdForRole(other.id, QString::fromLatin1(FolderRole::Inbox)), subject) > 0);
+    }
+
+    // POP3S: das Zertifikat von GreenMail ist selbst signiert und muss abgelehnt werden.
+    void pop3TlsRejectsUntrustedCertificate()
+    {
+        const Account account = makePop3Account(QStringLiteral("tls-%1@fjordpost.test").arg(m_tag), 3995, Security::Tls, true);
+        Pop3Account pop3(account);
+        pop3.setCredentials(account, password);
+        pop3.ensureFolders();
+        QSignalSpy errors(&pop3, &Pop3Account::errorOccurred);
+        pop3.sync();
+        QTRY_COMPARE_WITH_TIMEOUT(errors.size(), 1, 10000);
+        qInfo() << errors.first().first().toString();
+        QTRY_VERIFY(!pop3.isSyncing());
+    }
+
+    // Filterregel auf echter IMAP-Zustellung; Verschieben und Flag müssen auf dem Server ankommen.
+    void filterRuleReachesServer()
+    {
+        FilterRule rule;
+        rule.name = QStringLiteral("Regel %1").arg(m_tag);
+        rule.accountId = m_anna.id;
+        rule.conditions = {{QStringLiteral("subject"), QStringLiteral("contains"), QStringLiteral("Filter %1").arg(m_tag)}};
+        rule.actions = {{QStringLiteral("read"), {}}, {QStringLiteral("archive"), {}}};
+        const qint64 ruleId = FilterStore::save(rule);
+        QVERIFY(ruleId > 0);
+
+        const QString subject = QStringLiteral("Filter %1").arg(m_tag);
+        const QString other = QStringLiteral("Unberührt %1").arg(m_tag);
+        {
+            AccountManager accounts;
+            accounts.load();
+            FakeSecretStore secrets;
+            MailService mail(&accounts, &secrets);
+            QSignalSpy notified(&mail, &MailService::newMessages);
+            mail.start();
+            QTest::qWait(1500);
+            QVERIFY(send(subject, QStringLiteral("Soll ins Archiv")));
+            QVERIFY(send(other, QStringLiteral("Bleibt im Posteingang")));
+
+            const qint64 inbox = MailStore::folderIdForRole(m_anna.id, QString::fromLatin1(FolderRole::Inbox));
+            const qint64 archive = MailStore::folderIdForRole(m_anna.id, QString::fromLatin1(FolderRole::Archive));
+            const auto arrived = [&] {
+                mail.syncAccount(m_anna.id);
+                QTest::qWait(300);
+                return messageWithSubject(archive, subject) > 0 && messageWithSubject(inbox, other) > 0;
+            };
+            QTRY_VERIFY_WITH_TIMEOUT(arrived(), 20000);
+            QTRY_VERIFY_WITH_TIMEOUT(MailStore::pendingOps(m_anna.id).isEmpty(), 15000);
+            QCOMPARE(messageWithSubject(inbox, subject), 0);
+
+            // Benachrichtigt wird nur über die nicht gefilterte Nachricht.
+            const qint64 archivedId = messageWithSubject(archive, subject);
+            for (const QList<QVariant> &signal : std::as_const(notified))
+                QVERIFY(!signal.first().value<QList<qint64>>().contains(archivedId));
+        }
+        FilterStore::remove(ruleId);
+
+        const qint64 checkId = checkMessage(FolderRole::Archive, subject);
+        QVERIFY(checkId > 0);
+        QVERIFY(MailStore::location(checkId).flags & MessageFlag::Seen);
+        QCOMPARE(checkMessage(FolderRole::Inbox, subject), 0);
+        QVERIFY(checkMessage(FolderRole::Inbox, other) > 0);
+    }
+
+    // Import lädt auf den Server hoch; Export holt fehlende Inhalte von dort.
+    void importAndExportWithImap()
+    {
+        const QString seen = QStringLiteral("Import gelesen %1").arg(m_tag);
+        const QString flagged = QStringLiteral("Import markiert %1").arg(m_tag);
+        const auto rawMail = [this](const QString &subject, const QString &id) {
+            return QStringLiteral("From: Altes Archiv <alt@example.com>\nTo: anna@fjordpost.test\nSubject: %1\nMessage-ID: <%2-%3@example.com>\n"
+                                  "Date: Mon, 05 Jan 2026 09:00:00 +0100\n\nInhalt aus dem Archiv\n")
+                .arg(subject, id, m_tag)
+                .toUtf8();
+        };
+        const QString path = m_dir.filePath(QStringLiteral("import.mbox"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(Mbox::entry(rawMail(seen, QStringLiteral("a")), QStringLiteral("alt@example.com"), QDateTime::currentDateTimeUtc(), MessageFlag::Seen));
+        file.write(Mbox::entry(rawMail(flagged, QStringLiteral("b")), QStringLiteral("alt@example.com"), QDateTime::currentDateTimeUtc(), MessageFlag::Flagged));
+        file.close();
+
+        const qint64 archive = MailStore::folderIdForRole(m_anna.id, QString::fromLatin1(FolderRole::Archive));
+        {
+            AccountManager accounts;
+            accounts.load();
+            FakeSecretStore secrets;
+            MailService mail(&accounts, &secrets);
+            mail.start();
+            QTest::qWait(1000);
+            MailTransfer transfer(&mail, &accounts);
+            QSignalSpy finished(&transfer, &MailTransfer::finished);
+
+            QCOMPARE(transfer.startImport(archive, {path}), QString());
+            QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 20000);
+            qInfo() << finished.first().first().toString();
+            QTRY_VERIFY_WITH_TIMEOUT(messageWithSubject(archive, flagged) > 0, 15000);
+            QVERIFY(messageWithSubject(archive, seen) > 0);
+
+            // Noch ohne Inhalt: nur der Posteingang wird vorab geladen.
+            const qint64 id = messageWithSubject(archive, flagged);
+            QVERIFY(!MailStore::location(id).bodyFetched);
+            const QString out = m_dir.filePath(QStringLiteral("export.mbox"));
+            finished.clear();
+            QCOMPARE(transfer.startExport({id, messageWithSubject(archive, seen)}, out, false), QString());
+            QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 20000);
+            qInfo() << finished.first().first().toString();
+
+            QFile exported(out);
+            QVERIFY(exported.open(QIODevice::ReadOnly));
+            Mbox::Reader reader(&exported);
+            const QByteArray first = reader.next();
+            const QByteArray second = reader.next();
+            QVERIFY(MessageParser::parse(first).plainText.contains(QStringLiteral("Inhalt aus dem Archiv")));
+            QVERIFY(MessageParser::parse(second).plainText.contains(QStringLiteral("Inhalt aus dem Archiv")));
+            QVERIFY(Mbox::flagsFromHeaders(first) & MessageFlag::Flagged);
+        }
+
+        const qint64 checkSeen = checkMessage(FolderRole::Archive, seen);
+        const qint64 checkFlagged = checkMessage(FolderRole::Archive, flagged);
+        QVERIFY(checkSeen > 0 && checkFlagged > 0);
+        QVERIFY(MailStore::location(checkSeen).flags & MessageFlag::Seen);
+        QVERIFY(MailStore::location(checkFlagged).flags & MessageFlag::Flagged);
+        QVERIFY(!(MailStore::location(checkFlagged).flags & MessageFlag::Seen));
+    }
+
+    // Aufgeweckte Nachrichten werden auch auf dem Server wieder ungelesen.
+    void wakingMarksUnreadOnServer()
+    {
+        const QString subject = QStringLiteral("Unberührt %1").arg(m_tag);
+        const qint64 inbox = MailStore::folderIdForRole(m_anna.id, QString::fromLatin1(FolderRole::Inbox));
+        const qint64 id = messageWithSubject(inbox, subject);
+        QVERIFY(id > 0);
+        const MessageLocation loc = MailStore::location(id);
+        QVERIFY(loc.uid > 0);
+
+        MailStore::updateFlags(id, loc.flags | MessageFlag::Seen);
+        MailStore::enqueueOp(m_anna.id, QStringLiteral("flags"), loc.folderPath, loc.uid, QStringLiteral("+\\Seen"));
+        MailStore::setSnooze({id}, QDateTime::currentSecsSinceEpoch() - 1);
+        {
+            AccountManager accounts;
+            accounts.load();
+            FakeSecretStore secrets;
+            MailService mail(&accounts, &secrets);
+            QSignalSpy notified(&mail, &MailService::newMessages);
+            mail.start();
+            QTRY_VERIFY_WITH_TIMEOUT(!notified.isEmpty(), 10000);
+            QVERIFY(notified.first().first().value<QList<qint64>>().contains(id));
+            QTRY_VERIFY_WITH_TIMEOUT(MailStore::pendingOps(m_anna.id).isEmpty(), 15000);
+        }
+        QCOMPARE(MailStore::snoozeUntil(id), 0);
+        const qint64 checkId = checkMessage(FolderRole::Inbox, subject);
+        QVERIFY(checkId > 0);
+        QVERIFY(!(MailStore::location(checkId).flags & MessageFlag::Seen));
+    }
+
+    void replyAndSpamRuleWorkTogether()
+    {
+        const QString question = QStringLiteral("Zurückgestellt %1").arg(m_tag);
+        const QString reply = QStringLiteral("Antwort %1").arg(m_tag);
+        const QString spam = QStringLiteral("Werbung %1").arg(m_tag);
+        const qint64 inbox = MailStore::folderIdForRole(m_anna.id, QString::fromLatin1(FolderRole::Inbox));
+
+        FilterRule rule;
+        rule.name = QStringLiteral("Spam %1").arg(m_tag);
+        rule.accountId = m_anna.id;
+        rule.conditions = {{QStringLiteral("subject"), QStringLiteral("contains"), spam}};
+        rule.actions = {{QStringLiteral("junk"), {}}};
+        const qint64 ruleId = FilterStore::save(rule);
+        QVERIFY(ruleId > 0);
+
+        {
+            AccountManager accounts;
+            accounts.load();
+            FakeSecretStore secrets;
+            MailService mail(&accounts, &secrets);
+            mail.start();
+            QTest::qWait(1500);
+            QVERIFY(send(question, QStringLiteral("Bitte später")));
+            qint64 id = 0;
+            const auto questionArrived = [&] {
+                mail.syncAccount(m_anna.id);
+                QTest::qWait(300);
+                id = messageWithSubject(inbox, question);
+                return id > 0;
+            };
+            QTRY_VERIFY_WITH_TIMEOUT(questionArrived(), 20000);
+
+            QSqlQuery q(Database::connection());
+            q.prepare(QStringLiteral("SELECT message_id FROM messages WHERE id = ?"));
+            q.addBindValue(id);
+            QVERIFY(q.exec() && q.next());
+            MailStore::setSnooze({id}, QDateTime::currentSecsSinceEpoch() + 3600);
+
+            OutgoingMessage answer = outgoing(reply);
+            answer.inReplyTo = q.value(0).toString().toUtf8();
+            QVERIFY(deliver(answer));
+            QVERIFY(send(spam, QStringLiteral("Kaufen!")));
+
+            const auto done = [&] {
+                mail.syncAccount(m_anna.id);
+                QTest::qWait(300);
+                const qint64 junk = MailStore::folderIdForRole(m_anna.id, QString::fromLatin1(FolderRole::Junk));
+                return MailStore::snoozeUntil(id) == 0 && junk > 0 && messageWithSubject(junk, spam) > 0;
+            };
+            QTRY_VERIFY_WITH_TIMEOUT(done(), 20000);
+            QTRY_VERIFY_WITH_TIMEOUT(MailStore::pendingOps(m_anna.id).isEmpty(), 15000);
+        }
+        FilterStore::remove(ruleId);
+        QVERIFY(checkMessage(FolderRole::Junk, spam) > 0);
+    }
+
 private:
+    Account makePop3Account(const QString &email, int port, Security security, bool leaveOnServer)
+    {
+        AccountManager accounts;
+        Account a;
+        a.name = email;
+        a.email = email;
+        a.username = email;
+        a.type = AccountType::Pop3;
+        a.incomingHost = m_host;
+        a.incomingPort = port;
+        a.incomingSecurity = security;
+        a.leaveOnServer = leaveOnServer;
+        return accounts.save(a);
+    }
+
+    static bool syncPop3(Pop3Account &pop3)
+    {
+        pop3.sync();
+        return QTest::qWaitFor([&] { return !pop3.isSyncing(); }, 10000);
+    }
+
+    static int countIn(qint64 folder)
+    {
+        QSqlQuery q(Database::connection());
+        q.prepare(QStringLiteral("SELECT COUNT(*) FROM messages WHERE folder_id = ?"));
+        q.addBindValue(folder);
+        return q.exec() && q.next() ? q.value(0).toInt() : -1;
+    }
+
+    bool sendTo(const QString &address, const QString &subject, const QString &text)
+    {
+        OutgoingMessage m;
+        m.fromName = QStringLiteral("Max Mustermann");
+        m.fromEmail = m_max.email;
+        m.to = {address};
+        m.subject = subject;
+        m.plainText = text;
+        const QByteArray raw = MessageBuilder::build(m);
+
+        SmtpSender smtp;
+        bool done = false, ok = false;
+        smtp.send(m_max, password, m_max.email, MessageBuilder::envelopeRecipients(m), raw, [&](bool success, const QString &) {
+            ok = success;
+            done = true;
+        });
+        return QTest::qWaitFor([&] { return done; }, 15000) && ok;
+    }
+
+    bool deliver(const OutgoingMessage &m)
+    {
+        SmtpSender smtp;
+        bool done = false, ok = false;
+        smtp.send(m_max, password, m_max.email, MessageBuilder::envelopeRecipients(m), MessageBuilder::build(m), [&](bool success, const QString &) {
+            ok = success;
+            done = true;
+        });
+        return QTest::qWaitFor([&] { return done; }, 15000) && ok;
+    }
+
     OutgoingMessage outgoing(const QString &subject) const
     {
         OutgoingMessage m;

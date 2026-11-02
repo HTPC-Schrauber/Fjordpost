@@ -8,10 +8,13 @@
 #include <QSet>
 #include <QTimer>
 
+#include <functional>
+
 namespace Fjordpost {
 
 class AccountManager;
 class ImapAccount;
+class Pop3Account;
 class SecretStore;
 class SmtpSender;
 
@@ -45,8 +48,12 @@ public:
     // sofort senden. Liefert true, solange noch Versand oder Ablage läuft.
     bool sendDelayedNow();
     bool hasPendingWork() const;
-    // Entwurf auf dem Server ablegen (IMAP) bzw. lokal (POP3, M2).
+    // Entwurf auf dem Server ablegen (IMAP) bzw. lokal (POP3).
     QString saveDraft(qint64 accountId, const OutgoingMessage &message);
+    // Für den Import: IMAP lädt auf den Server hoch, POP3 speichert lokal. done läuft
+    // auch bei fehlgeschlagener Anmeldung, solange context lebt.
+    bool canStoreMessages(qint64 accountId) const;
+    void storeMessage(qint64 accountId, qint64 folderId, const QByteArray &raw, int flags, QObject *context, std::function<void(bool ok)> done);
 
     bool isSyncing() const { return !m_syncing.isEmpty(); }
 
@@ -64,6 +71,15 @@ Q_SIGNALS:
 
 private:
     void addAccount(const Account &account);
+    void addImapAccount(const Account &account);
+    void addPop3Account(const Account &account);
+    template<typename T>
+    void connectAccount(T *mailbox, qint64 id);
+    void dropAccount(qint64 accountId);
+    // Filterregeln anwenden, dann für das Übrige benachrichtigen.
+    void handleArrived(qint64 accountId, const QList<qint64> &messageIds, bool notify);
+    void wakeSnoozed();
+    void markWoken(const QList<qint64> &messageIds);
     void removeAccount(qint64 accountId);
     void updateAccount(const Account &account);
     void processOutbox();
@@ -73,11 +89,13 @@ private:
     SecretStore *m_secrets;
     SmtpSender *m_smtp;
     QHash<qint64, ImapAccount *> m_imap;
+    QHash<qint64, Pop3Account *> m_pop3;
     QHash<qint64, QString> m_secretCache;
     QSet<qint64> m_syncing;
     QSet<qint64> m_sendingOutbox;
     QTimer m_syncTimer;
     QTimer m_outboxTimer;
+    QTimer m_snoozeTimer;
 };
 
 } // namespace Fjordpost

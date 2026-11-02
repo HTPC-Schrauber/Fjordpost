@@ -110,6 +110,21 @@ Kirigami.AbstractApplicationWindow {
         } else if (name === "label-filter") {
             const first = App.labels.index(0, 0);
             App.selectLabel(App.labels.data(first, Qt.UserRole + 1), App.labels.data(first, Qt.UserRole + 2));
+        } else if (name === "snooze-menu") {
+            messageList.openFirst();
+            readerPane.openSnoozeMenu();
+        } else if (name === "snooze-date") {
+            messageList.openFirst();
+            readerPane.openSnoozePicker();
+        } else if (name === "snoozed") {
+            messageList.openFirst();
+            App.snoozeMessage(App.currentMessage.id, App.snoozeOptions()[0].time);
+            App.selectFolder(0, "snoozed", i18n("Snoozed"));
+        } else if (name === "filter-rules") {
+            filterRules.open();
+        } else if (name === "filter-rule") {
+            filterRules.open();
+            filterRules.editRule(null);
         } else if (name === "undo-send") {
             messageList.openFirst();
             App.sendQuickReply("Test");
@@ -130,6 +145,12 @@ Kirigami.AbstractApplicationWindow {
 
     SettingsDialog {
         id: settingsDialog
+        parent: root.overlay
+        onFilterRulesRequested: filterRules.open()
+    }
+
+    FilterRulesDialog {
+        id: filterRules
         parent: root.overlay
     }
 
@@ -226,6 +247,7 @@ Kirigami.AbstractApplicationWindow {
                     onComposeRequested: root.compose(0, "new")
                     onNewLabelRequested: labelDialog.openNew(0)
                     onEditLabelRequested: (id, name, color) => labelDialog.openEdit(id, name, color)
+                    onFilterRulesRequested: filterRules.open()
                 }
 
                 MessageListPane {
@@ -337,6 +359,11 @@ Kirigami.AbstractApplicationWindow {
         sequence: "L"
         enabled: App.currentMessage.id !== undefined && !inlineComposer.active
         onActivated: readerPane.openLabelMenu()
+    }
+    Shortcut {
+        sequence: "B"
+        enabled: App.currentMessage.id !== undefined && !inlineComposer.active
+        onActivated: readerPane.openSnoozeMenu()
     }
     Shortcut {
         sequence: "Ctrl+1"

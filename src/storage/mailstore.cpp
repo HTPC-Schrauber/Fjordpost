@@ -1,5 +1,6 @@
 #include "mailstore.h"
 
+#include "blobstore.h"
 #include "database.h"
 #include "messageflags.h"
 
@@ -212,6 +213,7 @@ qint64 ensureFolderForRole(qint64 accountId, const QString &role)
         {QString::fromLatin1(FolderRole::Sent), QStringLiteral("Sent")},
         {QString::fromLatin1(FolderRole::Trash), QStringLiteral("Trash")},
         {QString::fromLatin1(FolderRole::Archive), QStringLiteral("Archive")},
+        {QString::fromLatin1(FolderRole::Junk), QStringLiteral("Junk")},
     };
     const QString name = names.value(role);
     if (name.isEmpty())
@@ -359,6 +361,96 @@ qint64 insertMessage(qint64 accountId, qint64 folderId, qint64 uid, int flags, q
     return id;
 }
 
+qint64 insertRaw(qint64 accountId, qint64 folderId, const QByteArray &raw, int flags, const QString &blobCategory)
+{
+    const QString blob = BlobStore::store(accountId, blobCategory, raw);
+    if (blob.isEmpty())
+        return 0;
+    const ParsedMessage parsed = MessageParser::parse(raw);
+    const qint64 id = insertMessage(accountId, folderId, 0, flags, raw.size(), parsed);
+    if (id == 0) {
+        BlobStore::remove(blob);
+        return 0;
+    }
+    storeBody(id, blob, parsed);
+    return id;
+}
+
+bool hasMessageId(qint64 folderId, const QByteArray &messageId)
+{
+    if (messageId.isEmpty())
+        return false;
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT 1 FROM messages WHERE folder_id = ? AND message_id = ? LIMIT 1"));
+    q.addBindValue(folderId);
+    q.addBindValue(QString::fromUtf8(messageId));
+    return exec(q) && q.next();
+}
+
+void setSnooze(const QList<qint64> &messageIds, qint64 until)
+{
+    QSqlQuery q(Database::connection());
+    // Vorzeitig zurückgeholte Nachrichten stehen wie aufgeweckte wieder oben.
+    q.prepare(QStringLiteral("UPDATE messages SET snooze_until = ?, woken_at = ? WHERE id = ?"));
+    for (qint64 id : messageIds) {
+        q.addBindValue(until);
+        q.addBindValue(until > 0 ? qint64(0) : QDateTime::currentSecsSinceEpoch());
+        q.addBindValue(id);
+        exec(q);
+    }
+}
+
+QList<qint64> wakeSnoozed(qint64 now)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT id FROM messages WHERE snooze_until > 0 AND snooze_until <= ? ORDER BY snooze_until"));
+    q.addBindValue(now);
+    exec(q);
+    QList<qint64> ids;
+    while (q.next())
+        ids << q.value(0).toLongLong();
+    setSnooze(ids, 0);
+    return ids;
+}
+
+QList<qint64> wakeRepliedThreads(const QList<qint64> &arrivedIds, const QString &ownEmail)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT s.id FROM messages r JOIN folders f ON f.id = r.folder_id "
+                             "JOIN messages s ON s.account_id = r.account_id AND s.thread_id = r.thread_id "
+                             "WHERE r.id = ? AND s.id != r.id AND s.snooze_until > 0 "
+                             "AND f.role NOT IN ('trash', 'junk') AND r.from_email != ? COLLATE NOCASE"));
+    QList<qint64> ids;
+    for (qint64 id : arrivedIds) {
+        q.addBindValue(id);
+        q.addBindValue(nonNull(ownEmail));
+        exec(q);
+        while (q.next()) {
+            if (const qint64 snoozed = q.value(0).toLongLong(); !ids.contains(snoozed))
+                ids << snoozed;
+        }
+    }
+    setSnooze(ids, 0);
+    return ids;
+}
+
+qint64 snoozeUntil(qint64 messageId)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT snooze_until FROM messages WHERE id = ?"));
+    q.addBindValue(messageId);
+    return exec(q) && q.next() ? q.value(0).toLongLong() : 0;
+}
+
+int snoozedCount(qint64 accountId)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT COUNT(*) FROM messages WHERE snooze_until > 0 AND (? = 0 OR account_id = ?)"));
+    q.addBindValue(accountId);
+    q.addBindValue(accountId);
+    return exec(q) && q.next() ? q.value(0).toInt() : 0;
+}
+
 void updateFlags(qint64 messageId, int flags)
 {
     QSqlQuery q(Database::connection());
@@ -431,7 +523,8 @@ QList<qint64> messagesWithoutBody(qint64 folderId, int limit, qint64 maxSize)
 void moveLocally(qint64 messageId, qint64 targetFolderId)
 {
     QSqlQuery q(Database::connection());
-    q.prepare(QStringLiteral("UPDATE messages SET folder_id = ?, uid = 0 WHERE id = ?"));
+    // Verschieben beendet eine Zurückstellung, sonst bliebe die Nachricht unsichtbar.
+    q.prepare(QStringLiteral("UPDATE messages SET folder_id = ?, uid = 0, snooze_until = 0 WHERE id = ?"));
     q.addBindValue(targetFolderId);
     q.addBindValue(messageId);
     exec(q);
@@ -552,6 +645,38 @@ QList<qint64> threadMessages(qint64 messageId, bool sameFolder)
     if (ids.isEmpty())
         ids << messageId;
     return ids;
+}
+
+QSet<QByteArray> pop3KnownUids(qint64 accountId)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT uidl FROM pop3_uids WHERE account_id = ?"));
+    q.addBindValue(accountId);
+    exec(q);
+    QSet<QByteArray> uids;
+    while (q.next())
+        uids.insert(q.value(0).toString().toUtf8());
+    return uids;
+}
+
+void rememberPop3Uid(qint64 accountId, const QByteArray &uidl)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("INSERT OR IGNORE INTO pop3_uids (account_id, uidl) VALUES (?, ?)"));
+    q.addBindValue(accountId);
+    q.addBindValue(QString::fromUtf8(uidl));
+    exec(q);
+}
+
+void forgetPop3Uids(qint64 accountId, const QSet<QByteArray> &uidls)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("DELETE FROM pop3_uids WHERE account_id = ? AND uidl = ?"));
+    for (const QByteArray &uidl : uidls) {
+        q.addBindValue(accountId);
+        q.addBindValue(QString::fromUtf8(uidl));
+        exec(q);
+    }
 }
 
 void enqueueOp(qint64 accountId, const QString &op, const QString &folderPath, qint64 uid, const QString &argument)

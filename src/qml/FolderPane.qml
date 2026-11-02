@@ -1,5 +1,7 @@
+import QtCore
 import QtQuick
 import QtQuick.Controls as QQC2
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import de.fjordblau.fjordpost.core
@@ -12,6 +14,7 @@ Rectangle {
     signal composeRequested()
     signal newLabelRequested()
     signal editLabelRequested(var labelId, string name, string color)
+    signal filterRulesRequested()
 
     color: Theme.sidebar
 
@@ -120,6 +123,11 @@ Rectangle {
                     hoverEnabled: true
                     onClicked: App.selectFolder(folderId, folderRole, name)
 
+                    TapHandler {
+                        acceptedButtons: Qt.RightButton
+                        onTapped: folderMenu.openFor(folder.folderId, folder.folderRole, folder.name)
+                    }
+
                     background: Rectangle {
                         radius: Theme.radius
                         color: folder.current ? Qt.alpha(Theme.accent, 0.15) : (folder.hovered ? Theme.card : "transparent")
@@ -176,6 +184,14 @@ Rectangle {
                             Layout.fillWidth: true
                             leftPadding: 8
                             text: i18n("Labels & Filters")
+                        }
+                        IconButton {
+                            implicitWidth: 22
+                            implicitHeight: 20
+                            iconName: "view-filter"
+                            iconSize: 12
+                            tooltip: i18n("Filter rules")
+                            onClicked: pane.filterRulesRequested()
                         }
                         IconButton {
                             implicitWidth: 22
@@ -260,6 +276,32 @@ Rectangle {
             }
         }
 
+        // Import/Export
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 14
+            Layout.rightMargin: 10
+            visible: App.transferBusy
+            QQC2.BusyIndicator {
+                Layout.preferredWidth: 16
+                Layout.preferredHeight: 16
+                running: App.transferBusy
+            }
+            QQC2.Label {
+                Layout.fillWidth: true
+                text: App.transferStatus
+                elide: Text.ElideRight
+                font.pointSize: Theme.fontXxs
+                color: Theme.textSecondary
+            }
+            IconButton {
+                iconName: "dialog-cancel"
+                iconSize: 12
+                tooltip: i18n("Cancel")
+                onClicked: App.cancelTransfer()
+            }
+        }
+
         // Fehlermeldung
         Rectangle {
             Layout.fillWidth: true
@@ -327,6 +369,51 @@ Rectangle {
                 }
             }
         }
+    }
+
+    QQC2.Menu {
+        id: folderMenu
+        property var folderId: 0
+        property string folderRole
+        property string folderName
+        function openFor(id, role, name) {
+            folderId = id;
+            folderRole = role;
+            folderName = name;
+            popup();
+        }
+        QQC2.MenuItem {
+            text: folderMenu.folderId > 0 ? i18n("Import Messages…") : i18n("Import Messages (choose an account first)")
+            enabled: folderMenu.folderId > 0 && !App.transferBusy
+            icon.name: "document-import"
+            onTriggered: importDialog.open()
+        }
+        QQC2.MenuItem {
+            text: i18n("Export as mbox…")
+            enabled: !App.transferBusy && folderMenu.folderRole !== "flagged" && folderMenu.folderRole !== "snoozed"
+            icon.name: "document-export"
+            onTriggered: {
+                exportDialog.selectedFile = exportDialog.currentFolder + "/" + folderMenu.folderName.replace(/[\/\\:*?"<>|]/g, "_") + ".mbox";
+                exportDialog.open();
+            }
+        }
+    }
+
+    FileDialog {
+        id: importDialog
+        fileMode: FileDialog.OpenFiles
+        title: i18n("Import into %1", folderMenu.folderName)
+        nameFilters: [i18n("Mail files (*.mbox *.eml *.mbx)"), i18n("All files (*)")]
+        onAccepted: App.importInto(folderMenu.folderId, selectedFiles)
+    }
+
+    FileDialog {
+        id: exportDialog
+        fileMode: FileDialog.SaveFile
+        title: i18n("Export %1", folderMenu.folderName)
+        nameFilters: [i18n("mbox files (*.mbox)")]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        onAccepted: App.exportFolder(folderMenu.folderId, folderMenu.folderRole, selectedFile)
     }
 
     QQC2.Menu {

@@ -3,6 +3,7 @@
 #include "core/accountmanager.h"
 #include "core/secretstore.h"
 #include "mail/imap/imapconnection.h"
+#include "mail/pop3/pop3client.h"
 #include "mail/smtp/smtpsender.h"
 
 #include <KIMAP/LoginJob>
@@ -76,6 +77,7 @@ void AccountSetup::reset()
     m_email.clear();
     m_username.clear();
     m_pop3 = false;
+    m_leaveOnServer = true;
     m_incomingHost.clear();
     m_incomingPort = 993;
     m_incomingSecurity = 2;
@@ -173,6 +175,7 @@ Account AccountSetup::currentAccount() const
     a.outgoingHost = m_outgoingHost.trimmed();
     a.outgoingPort = m_outgoingPort;
     a.outgoingSecurity = securityFromIndex(m_outgoingSecurity);
+    a.leaveOnServer = m_leaveOnServer;
     return a;
 }
 
@@ -236,43 +239,49 @@ void AccountSetup::restoreEntered(bool incoming, bool outgoing)
 void AccountSetup::testIncoming(const QString &password)
 {
     const Account account = currentAccount();
+    setStatus(i18n("Signing in to %1…", account.incomingHost));
+    const int generation = m_generation;
+
     if (account.type == AccountType::Pop3) {
-        // POP3-Anmeldung wird mit dem POP3-Client in M2 geprüft.
-        testOutgoing(password);
+        testPop3Login(account, password, this, [this, password, generation](bool ok, const QString &error) {
+            if (generation == m_generation)
+                incomingTested(ok, error, password);
+        });
         return;
     }
 
-    setStatus(i18n("Signing in to %1…", account.incomingHost));
     auto *session = new KIMAP::Session(account.incomingHost, quint16(account.incomingPort), this);
     session->setTimeout(20);
     auto *login = ImapConnection::createLoginJob(session, account, password);
-    const int generation = m_generation;
     connect(login, &KJob::result, this, [this, session, login, password, generation](KJob *) {
         const bool ok = !login->error();
         const QString error = login->errorString();
         if (ok)
             (new KIMAP::LogoutJob(session))->start();
         session->deleteLater();
-        if (generation != m_generation)
-            return;
-
-        if (ok) {
-            testOutgoing(password);
-            return;
-        }
-        // Bei geratenen Einstellungen nächsten Kandidaten probieren.
-        if (m_tryIncomingCandidates && m_incomingCandidate + 1 < m_settings.incoming.size()) {
-            ++m_incomingCandidate;
-            applyIncomingCandidate();
-            testIncoming(password);
-            return;
-        }
-        restoreEntered(true, true);
-        setBusy(false);
-        setStatus(QString());
-        setError(i18n("Could not sign in to the incoming server: %1", error));
+        if (generation == m_generation)
+            incomingTested(ok, error, password);
     });
     login->start();
+}
+
+void AccountSetup::incomingTested(bool ok, const QString &error, const QString &password)
+{
+    if (ok) {
+        testOutgoing(password);
+        return;
+    }
+    // Bei geratenen Einstellungen nächsten Kandidaten probieren.
+    if (m_tryIncomingCandidates && m_incomingCandidate + 1 < m_settings.incoming.size()) {
+        ++m_incomingCandidate;
+        applyIncomingCandidate();
+        testIncoming(password);
+        return;
+    }
+    restoreEntered(true, true);
+    setBusy(false);
+    setStatus(QString());
+    setError(i18n("Could not sign in to the incoming server: %1", error));
 }
 
 void AccountSetup::testOutgoing(const QString &password)

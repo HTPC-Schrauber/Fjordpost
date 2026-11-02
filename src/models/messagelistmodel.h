@@ -37,6 +37,7 @@ public:
         IsChildRole,   // ältere Nachricht unter einer aufgeklappten Konversation
         SentRole,      // liegt in "Gesendet"
         LabelsRole,    // [{name, color}], in der Konversationsansicht aller Nachrichten
+        SnoozedUntilRole, // Weckzeit als Text, sonst leer
     };
 
     struct Filter {
@@ -98,6 +99,7 @@ private:
         bool sent = false;
         QDateTime groupDate; // Datumsgruppe; bei Unterzeilen die der Konversation
         QList<qint64> labelIds;
+        qint64 snoozeUntil = 0;
 
         bool operator==(const Row &) const = default;
     };

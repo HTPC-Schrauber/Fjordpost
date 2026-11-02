@@ -29,9 +29,29 @@ Rectangle {
             labelMenu.openFor(msg.id, labelButton);
     }
 
+    function openSnoozeMenu() {
+        if (hasMessage)
+            snoozeMenu.openFor(msg.id, snoozeButton, (msg.snoozedUntil ?? "").length > 0);
+    }
+
     LabelMenu {
         id: labelMenu
         onNewLabelRequested: id => pane.newLabelRequested(id)
+    }
+
+    SnoozeMenu {
+        id: snoozeMenu
+        onPickTimeRequested: id => snoozePicker.openFor(id)
+    }
+
+    SnoozeDatePicker {
+        id: snoozePicker
+    }
+
+    // Nur für --dev-action snooze-date
+    function openSnoozePicker() {
+        if (hasMessage)
+            snoozePicker.openFor(msg.id);
     }
 
     color: Theme.reading
@@ -104,10 +124,11 @@ Rectangle {
                     onClicked: App.archiveMessage(pane.msg.id)
                 }
                 IconButton {
+                    id: snoozeButton
                     iconName: "chronometer"
                     hoverColor: Theme.warning
-                    tooltip: i18n("Snooze (coming in a later version)")
-                    onClicked: pane.notify(i18n("Snoozing will be available in a later version."))
+                    tooltip: i18n("Snooze (B)")
+                    onClicked: pane.openSnoozeMenu()
                 }
                 IconButton {
                     iconName: "edit-delete"
@@ -144,6 +165,15 @@ Rectangle {
                     iconName: "tag"
                     tooltip: i18n("Labels (L)")
                     onClicked: pane.openLabelMenu()
+                }
+                IconButton {
+                    iconName: "document-save-as"
+                    tooltip: i18n("Save message as file")
+                    onClicked: {
+                        emlDialog.messageId = pane.msg.id;
+                        emlDialog.selectedFile = emlDialog.currentFolder + "/" + String(pane.msg.subject ?? "message").replace(/[\/\\:*?"<>|]/g, "_") + ".eml";
+                        emlDialog.open();
+                    }
                 }
 
                 Item {
@@ -267,6 +297,11 @@ Rectangle {
                 Tag {
                     text: pane.msg.accountName ?? ""
                     tint: pane.msg.accountColor ?? Theme.accent
+                }
+                Tag {
+                    visible: text.length > 0
+                    text: (pane.msg.snoozedUntil ?? "").length > 0 ? i18n("Snoozed until %1", pane.msg.snoozedUntil) : ""
+                    tint: Theme.warning
                 }
                 Repeater {
                     model: pane.msg.labels ?? []
@@ -850,6 +885,15 @@ Rectangle {
                 }
             }
         }
+    }
+
+    FileDialog {
+        id: emlDialog
+        property var messageId: 0
+        fileMode: FileDialog.SaveFile
+        nameFilters: [i18n("Email messages (*.eml)")]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DownloadLocation)
+        onAccepted: App.exportMessage(messageId, selectedFile)
     }
 
     FileDialog {

@@ -27,6 +27,7 @@ class AccountSetup : public QObject
     Q_PROPERTY(QString email MEMBER m_email NOTIFY settingsChanged)
     Q_PROPERTY(QString username MEMBER m_username NOTIFY settingsChanged)
     Q_PROPERTY(bool pop3 MEMBER m_pop3 NOTIFY settingsChanged)
+    Q_PROPERTY(bool leaveOnServer MEMBER m_leaveOnServer NOTIFY settingsChanged)
     Q_PROPERTY(QString incomingHost MEMBER m_incomingHost NOTIFY settingsChanged)
     Q_PROPERTY(int incomingPort MEMBER m_incomingPort NOTIFY settingsChanged)
     Q_PROPERTY(int incomingSecurity MEMBER m_incomingSecurity NOTIFY settingsChanged)
@@ -71,6 +72,7 @@ private:
     void restoreEntered(bool incoming, bool outgoing);
     Account currentAccount() const;
     void testIncoming(const QString &password);
+    void incomingTested(bool ok, const QString &error, const QString &password);
     void testOutgoing(const QString &password);
     void save(const QString &password);
 
@@ -110,6 +112,7 @@ private:
     QString m_email;
     QString m_username;
     bool m_pop3 = false;
+    bool m_leaveOnServer = true;
     QString m_incomingHost;
     int m_incomingPort = 993;
     int m_incomingSecurity = 2;

@@ -8,13 +8,19 @@ add_library(fjordpostcore STATIC
     storage/demodata.cpp
     storage/mailstore.cpp
     storage/labelstore.cpp
+    storage/filterstore.cpp
     mail/autoconfig/autoconfig.cpp
+    mail/filterengine.cpp
     mail/imap/imapaccount.cpp
     mail/imap/imapconnection.cpp
     mail/mailservice.cpp
+    mail/mailtransfer.cpp
+    mail/mime/mbox.cpp
     mail/mime/messagebuilder.cpp
     mail/mime/messageparser.cpp
     mail/net/linesocket.cpp
+    mail/pop3/pop3account.cpp
+    mail/pop3/pop3client.cpp
     mail/smtp/smtpsender.cpp
     models/accountmodel.cpp
     models/foldermodel.cpp
@@ -50,6 +56,10 @@ ecm_target_qml_sources(fjordpost SOURCES
     qml/ThreadChildDelegate.qml
     qml/LabelDialog.qml
     qml/LabelMenu.qml
+    qml/SnoozeMenu.qml
+    qml/SnoozeDatePicker.qml
+    qml/FilterRulesDialog.qml
+    qml/FilterRuleDialog.qml
     qml/ReaderPane.qml
     qml/RailButton.qml
     qml/ComposerForm.qml

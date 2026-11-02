@@ -57,7 +57,7 @@ QList<FolderState> folders(qint64 accountId);
 FolderState folder(qint64 folderId);
 qint64 folderIdForRole(qint64 accountId, const QString &role);
 qint64 folderIdForPath(qint64 accountId, const QString &path);
-// Liefert den Ordner für eine Rolle (Gesendet, Entwürfe, Papierkorb, Archiv). Fehlt er,
+// Liefert den Ordner für eine Rolle (Gesendet, Entwürfe, Papierkorb, Archiv, Spam). Fehlt er,
 // wird er lokal angelegt und eine "create"-Operation für den Server eingereiht.
 qint64 ensureFolderForRole(qint64 accountId, const QString &role);
 // Pfade, deren Anlage auf dem Server noch aussteht (dürfen beim Abgleich nicht verschwinden).
@@ -66,10 +66,24 @@ int roleSortOrder(const QString &role);
 void saveFolderState(const FolderState &state);
 void clearFolder(qint64 folderId);
 
+// Snooze (rein lokal: auf dem Server bleibt die Nachricht unverändert)
+void setSnooze(const QList<qint64> &messageIds, qint64 until);
+// Hebt abgelaufene Zurückstellungen auf und liefert die betroffenen Nachrichten.
+QList<qint64> wakeSnoozed(qint64 now);
+// Weckt zurückgestellte Nachrichten, deren Konversation Post bekommen hat, und liefert sie.
+// Eigene Mails und in Papierkorb/Spam gefilterte Nachrichten wecken nicht.
+QList<qint64> wakeRepliedThreads(const QList<qint64> &arrivedIds, const QString &ownEmail);
+// Sekunden seit 1970 oder 0
+qint64 snoozeUntil(qint64 messageId);
+int snoozedCount(qint64 accountId);
+
 // Nachrichten
 QHash<qint64, LocalMessage> localMessages(qint64 folderId, qint64 minUid = 0);
 qint64 minUid(qint64 folderId);
 qint64 insertMessage(qint64 accountId, qint64 folderId, qint64 uid, int flags, qint64 size, const ParsedMessage &headers);
+// Vollständige Nachricht ohne Server-Kopie ablegen (POP3, Import, lokale Ordner).
+qint64 insertRaw(qint64 accountId, qint64 folderId, const QByteArray &raw, int flags, const QString &blobCategory);
+bool hasMessageId(qint64 folderId, const QByteArray &messageId);
 void updateFlags(qint64 messageId, int flags);
 void removeMessages(const QList<qint64> &messageIds);
 void storeBody(qint64 messageId, const QString &blobPath, const ParsedMessage &parsed);
@@ -83,6 +97,11 @@ QList<qint64> threadMessages(qint64 messageId, bool sameFolder = false);
 // Ordnet einmalig alle Nachrichten neu den Konversationen zu (Bestände aus älteren
 // Versionen); danach nur, wenn sich das Verfahren ändert. Liefert die Zahl geänderter Nachrichten.
 int rebuildThreads();
+
+// Bereits abgerufene POP3-Nachrichten
+QSet<QByteArray> pop3KnownUids(qint64 accountId);
+void rememberPop3Uid(qint64 accountId, const QByteArray &uidl);
+void forgetPop3Uids(qint64 accountId, const QSet<QByteArray> &uidls);
 
 // Offline-Operationen
 void enqueueOp(qint64 accountId, const QString &op, const QString &folderPath, qint64 uid, const QString &argument = {});

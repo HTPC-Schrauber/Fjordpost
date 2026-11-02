@@ -25,6 +25,7 @@ QQC2.ItemDelegate {
     required property int threadCount
     required property bool expanded
     required property var labels
+    required property string snoozedUntil
 
     readonly property bool active: ListView.isCurrentItem
     readonly property bool unified: App.selectedAccountId === 0
@@ -175,12 +176,17 @@ QQC2.ItemDelegate {
             Layout.fillWidth: true
             Layout.topMargin: 4
             spacing: 6
-            visible: card.unified || card.hasAttachments || card.flagged || card.labels.length > 0
+            visible: card.unified || card.hasAttachments || card.flagged || card.labels.length > 0 || card.snoozedUntil.length > 0
 
             Tag {
                 visible: card.unified
                 text: card.folderName
                 tint: card.accountColor
+            }
+            Tag {
+                visible: card.snoozedUntil.length > 0
+                text: card.snoozedUntil
+                tint: Theme.warning
             }
             Repeater {
                 model: card.labels

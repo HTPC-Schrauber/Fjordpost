@@ -37,6 +37,10 @@ public:
     void fetchBody(qint64 messageId);
     // Nachricht in einen Ordner legen (Gesendet, Entwürfe).
     void append(const QString &role, const QByteArray &raw, const QList<QByteArray> &flags);
+    // Nachricht in einen bestimmten Ordner legen (Import); der Ordner wird nicht
+    // abgeglichen, das erledigt der Aufrufer am Ende. Bei fehlgeschlagener Anmeldung
+    // kommt done nie an: errorOccurred beachten.
+    void appendToFolder(const QString &path, const QByteArray &raw, const QList<QByteArray> &flags, std::function<void(bool ok)> done);
 
     void startIdle();
     void shutdown();
@@ -55,6 +59,7 @@ Q_SIGNALS:
     void errorOccurred(const QString &message);
     void foldersChanged();
     void folderUpdated(qint64 folderId);
+    // Neu im Posteingang, auch bereits gelesene (Filterregeln gelten für alle).
     void newMessages(const QList<qint64> &messageIds);
     void bodyFetched(qint64 messageId, bool ok);
 

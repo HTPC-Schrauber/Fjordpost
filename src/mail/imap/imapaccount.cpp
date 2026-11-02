@@ -317,7 +317,7 @@ void ImapAccount::fetchNewHeaders(KIMAP::Session *session, FolderState folder, i
             if (const QSet<QString> keywords = LabelStore::keywordsFromFlags(m.flags); id > 0 && !keywords.isEmpty())
                 LabelStore::applyKeywords(id, keywords);
             known->insert(m.uid, {id, flags});
-            if (notify && id > 0 && !(flags & MessageFlag::Seen))
+            if (notify && id > 0)
                 newIds->append(id);
         }
     });
@@ -672,6 +672,23 @@ void ImapAccount::append(const QString &role, const QByteArray &raw, const QList
             else
                 syncFolder(folderId);
             done();
+        });
+        job->start();
+    });
+}
+
+void ImapAccount::appendToFolder(const QString &path, const QByteArray &raw, const QList<QByteArray> &flags, std::function<void(bool)> done)
+{
+    m_interactive->enqueue([this, path, raw, flags, done = std::move(done)](KIMAP::Session *session, Done next) {
+        auto *job = new KIMAP::AppendJob(session);
+        job->setMailBox(path);
+        job->setFlags(flags);
+        job->setContent(raw);
+        connect(job, &KJob::result, this, [this, job, path, done, next](KJob *) {
+            if (job->error())
+                Q_EMIT errorOccurred(i18n("Could not store message in %1: %2", path, job->errorString()));
+            done(!job->error());
+            next();
         });
         job->start();
     });
