@@ -9,6 +9,8 @@ ecm_add_tests(
     smtptest.cpp
     pop3test.cpp
     m2featurestest.cpp
+    pimtest.cpp
+    davtest.cpp
     LINK_LIBRARIES fjordpostcore Qt6::Test
 )
 

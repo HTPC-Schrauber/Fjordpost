@@ -106,6 +106,12 @@ Rectangle {
         return false;
     }
 
+    // Nur für Screenshots (--dev-action compose-completion)
+    function showCompletionPreview() {
+        toField.text = "an";
+        toField.suggestions = App.pim.completeAddress("an");
+    }
+
     function discard() {
         dirty = false;
         finished();
@@ -219,7 +225,7 @@ Rectangle {
             FieldLabel {
                 text: i18n("To:")
             }
-            Field {
+            AddressField {
                 id: toField
                 Layout.fillWidth: true
                 text: composer.draft.to ?? ""
@@ -231,7 +237,7 @@ Rectangle {
                 text: i18n("Cc:")
                 visible: ccRow.visible
             }
-            Field {
+            AddressField {
                 id: ccField
                 Layout.fillWidth: true
                 visible: ccRow.visible
@@ -243,7 +249,7 @@ Rectangle {
                 text: i18n("Bcc:")
                 visible: bccRow.visible
             }
-            Field {
+            AddressField {
                 id: bccField
                 Layout.fillWidth: true
                 visible: bccRow.visible
@@ -426,6 +432,90 @@ Rectangle {
                 width: parent.width
                 height: 1
                 color: Theme.border
+            }
+        }
+    }
+
+    // Vorschläge aus dem Adressbuch für die Adresse, die gerade getippt wird
+    component AddressField: Field {
+        id: addressField
+        property var suggestions: []
+        property int highlighted: 0
+
+        function currentToken() {
+            const before = text.slice(0, cursorPosition);
+            return before.slice(Math.max(before.lastIndexOf(","), before.lastIndexOf(";")) + 1).trim();
+        }
+        function accept(address) {
+            const before = text.slice(0, cursorPosition);
+            const start = Math.max(before.lastIndexOf(","), before.lastIndexOf(";")) + 1;
+            const head = text.slice(0, start);
+            const tail = text.slice(cursorPosition);
+            text = (head.length > 0 ? head + " " : "") + address + ", " + tail.trimStart();
+            cursorPosition = text.length - tail.trimStart().length;
+            suggestions = [];
+            composer.dirty = true;
+        }
+
+        onTextEdited: {
+            suggestions = App.pim.completeAddress(currentToken());
+            highlighted = 0;
+        }
+        onActiveFocusChanged: {
+            if (!activeFocus)
+                suggestions = [];
+        }
+        Keys.onPressed: event => {
+            if (suggestions.length === 0)
+                return;
+            if (event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
+                highlighted = (highlighted + (event.key === Qt.Key_Down ? 1 : suggestions.length - 1)) % suggestions.length;
+                event.accepted = true;
+            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Tab) {
+                if (!(event.modifiers & Qt.ControlModifier)) {
+                    accept(suggestions[highlighted]);
+                    event.accepted = true;
+                }
+            } else if (event.key === Qt.Key_Escape) {
+                suggestions = [];
+                event.accepted = true;
+            }
+        }
+
+        QQC2.Popup {
+            visible: addressField.suggestions.length > 0
+            y: addressField.height + 2
+            width: addressField.width
+            padding: 4
+            closePolicy: QQC2.Popup.NoAutoClose
+            background: Rectangle {
+                radius: Theme.radiusSm
+                color: Theme.elevated
+                border.width: 1
+                border.color: Theme.border
+            }
+            contentItem: Column {
+                Repeater {
+                    model: addressField.suggestions
+                    QQC2.Label {
+                        required property string modelData
+                        required property int index
+                        width: parent.width
+                        padding: 6
+                        textFormat: Text.PlainText // "Name <adresse>" ist kein HTML
+                        text: modelData
+                        elide: Text.ElideRight
+                        font.pointSize: Theme.fontXs
+                        color: index === addressField.highlighted ? Theme.accentText : Theme.textPrimary
+                        background: Rectangle {
+                            radius: 4
+                            color: parent.index === addressField.highlighted ? Theme.accent : "transparent"
+                        }
+                        TapHandler {
+                            onTapped: addressField.accept(parent.modelData)
+                        }
+                    }
+                }
             }
         }
     }

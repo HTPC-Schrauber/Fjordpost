@@ -75,6 +75,23 @@ QByteArray headOf(const QByteArray &raw)
     return lf >= 0 ? raw.left(lf + 1) : raw;
 }
 
+// Einladungen stecken inline in multipart/alternative oder hängen als .ics an.
+static QByteArray findCalendar(const KMime::Content *content)
+{
+    if (const auto *type = content->contentType(); type && !type->isMultipart()) {
+        if (type->isMimeType("text/calendar") || type->isMimeType("application/ics"))
+            return content->decodedContent();
+        return {};
+    }
+    const auto parts = content->contents();
+    for (const KMime::Content *part : parts) {
+        const QByteArray found = findCalendar(part);
+        if (!found.isEmpty())
+            return found;
+    }
+    return {};
+}
+
 ParsedMessage parse(const QByteArray &raw)
 {
     KMime::Message message;
@@ -104,6 +121,7 @@ ParsedMessage parse(const QByteArray &raw)
         p.attachments << a;
     }
 
+    p.calendarData = findCalendar(&message);
     p.snippet = makeSnippet(p.plainText, p.html);
     return p;
 }

@@ -36,6 +36,16 @@ KMime::Content *textPart(const QByteArray &mimeType, const QString &text)
 // Setzt Text bzw. multipart/alternative direkt auf den Inhalt c.
 void fillBody(KMime::Content &c, const OutgoingMessage &m)
 {
+    if (!m.calendarData.isEmpty()) {
+        // Mailprogramme erkennen Einladungen am text/calendar-Teil mit method-Parameter.
+        c.contentType()->setMimeType("multipart/alternative");
+        c.contentType()->setBoundary(KMime::multiPartBoundary());
+        c.appendContent(textPart("text/plain", m.plainText));
+        auto *calendar = textPart("text/calendar", QString::fromUtf8(m.calendarData));
+        calendar->contentType()->setParameter(QByteArrayLiteral("method"), m.calendarMethod);
+        c.appendContent(calendar);
+        return;
+    }
     if (m.html.isEmpty()) {
         c.contentType()->setMimeType("text/plain");
         c.contentType()->setCharset("utf-8");

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDateTime>
 #include <QList>
 #include <QObject>
 #include <QPointer>
@@ -18,6 +19,7 @@ public:
 
     void setUnreadCount(int count);
     void notifyNewMessages(const QList<qint64> &messageIds);
+    void notifyReminder(const QString &title, const QDateTime &when);
 
 Q_SIGNALS:
     void activateRequested();

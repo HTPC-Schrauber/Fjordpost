@@ -1,7 +1,12 @@
 #include "demodata.h"
 
 #include "core/accountmanager.h"
+#include "mail/mime/messagebuilder.h"
+#include "pim/itip.h"
+#include "pim/pimdata.h"
+#include "storage/blobstore.h"
 #include "storage/database.h"
+#include "storage/davstore.h"
 #include "storage/labelstore.h"
 #include "storage/messageflags.h"
 
@@ -169,6 +174,140 @@ void seedAccount(AccountManager &accounts, const QString &name, const QString &e
         insertLongConversation(a.id, inbox, sent, now);
 }
 
+void addDemoItem(DavItem item, qint64 collectionId, const QString &extension)
+{
+    item.collectionId = collectionId;
+    item.href = QStringLiteral("https://dav.example.org/demo/%1/%2%3").arg(collectionId).arg(item.uid, extension);
+    item.etag = QStringLiteral("\"demo\"");
+    if (extension == QLatin1String(".vcf"))
+        Pim::deriveContactFields(item);
+    else
+        Pim::deriveCalendarFields(item);
+    DavStore::saveItem(item);
+}
+
+void addDemoEvent(qint64 calendar, const QString &uid, const QDateTime &start, int minutes, const QString &title, const QString &location,
+                  const QString &repeat = QStringLiteral("none"), bool allDay = false)
+{
+    DavItem item;
+    item.uid = uid;
+    item.raw = Pim::applyEventFields({},
+                                     {{QStringLiteral("summary"), title},
+                                      {QStringLiteral("location"), location},
+                                      {QStringLiteral("startMs"), double(start.toMSecsSinceEpoch())},
+                                      {QStringLiteral("endMs"), double(start.addSecs(minutes * 60).toMSecsSinceEpoch())},
+                                      {QStringLiteral("repeat"), repeat},
+                                      {QStringLiteral("allDay"), allDay}},
+                                     uid);
+    addDemoItem(item, calendar, QStringLiteral(".ics"));
+}
+
+void addDemoTask(qint64 list, const QString &uid, const QString &title, const QDateTime &due, int priority)
+{
+    DavItem item;
+    item.uid = uid;
+    item.raw = Pim::applyTodoFields({},
+                                    {{QStringLiteral("summary"), title},
+                                     {QStringLiteral("dueMs"), due.isValid() ? double(due.toMSecsSinceEpoch()) : 0.0},
+                                     {QStringLiteral("priority"), priority}},
+                                    uid);
+    addDemoItem(item, list, QStringLiteral(".ics"));
+}
+
+void addDemoContact(qint64 book, const QString &uid, const QString &name, const QString &organization, const QString &jobTitle, const QString &email, const QString &phone)
+{
+    DavItem item;
+    item.uid = uid;
+    item.raw = Pim::applyContactFields({},
+                                       {{QStringLiteral("name"), name},
+                                        {QStringLiteral("organization"), organization},
+                                        {QStringLiteral("jobTitle"), jobTitle},
+                                        {QStringLiteral("emails"), QStringList{email}},
+                                        {QStringLiteral("phones"), QStringList{phone}}},
+                                       uid);
+    addDemoItem(item, book, QStringLiteral(".vcf"));
+}
+
+// Eine echte Einladungs-Mail, damit die Karte im Lesebereich den normalen Weg nimmt.
+void insertDemoInvitation(qint64 accountId, qint64 inbox, const QString &ownEmail, const QDateTime &start)
+{
+    const QString organizer = QStringLiteral("anna.becker@example.org");
+    QString uid = QStringLiteral("demo-invitation");
+    const QString event = Pim::applyEventFields({},
+                                                {{QStringLiteral("summary"), QStringLiteral("Projekt-Workshop")},
+                                                 {QStringLiteral("location"), QStringLiteral("Raum Nordsee, 2. Stock")},
+                                                 {QStringLiteral("startMs"), double(start.toMSecsSinceEpoch())},
+                                                 {QStringLiteral("endMs"), double(start.addSecs(7200).toMSecsSinceEpoch())},
+                                                 {QStringLiteral("organizer"), QStringLiteral("Anna Becker <%1>").arg(organizer)},
+                                                 {QStringLiteral("attendees"), QStringList{QStringLiteral("Max Mustermann <%1>").arg(ownEmail), QStringLiteral("Thomas Wagner <t.wagner@example.com>")}}},
+                                                uid);
+    OutgoingMessage message;
+    message.fromName = QStringLiteral("Anna Becker");
+    message.fromEmail = organizer;
+    message.to = {ownEmail};
+    message.subject = QStringLiteral("Einladung: Projekt-Workshop");
+    const QByteArray ics = Itip::buildRequest(event);
+    message.plainText = Itip::plainTextSummary(Itip::parse(ics));
+    message.calendarData = ics;
+    message.calendarMethod = QStringLiteral("REQUEST");
+    const QByteArray raw = MessageBuilder::build(message);
+
+    const DemoMail mail{"Anna Becker", "anna.becker@example.org", "Einladung: Projekt-Workshop", "Einladung zum Projekt-Workshop"};
+    const qint64 id = insertMail(accountId, inbox, mail, QDateTime::currentDateTime().addSecs(-600), 0);
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("UPDATE messages SET blob_path = ?, body_fetched = 1 WHERE id = ?"));
+    q.addBindValue(BlobStore::store(accountId, QStringLiteral("demo"), raw));
+    q.addBindValue(id);
+    q.exec();
+}
+
+void seedPim(qint64 mailAccountId, const QString &email, qint64 inbox)
+{
+    DavAccount account;
+    account.name = QStringLiteral("Nextcloud");
+    account.url = QStringLiteral("https://dav.example.org/");
+    account.username = QStringLiteral("max");
+    account.mailAccountId = mailAccountId;
+    account.id = DavStore::saveAccount(account);
+
+    const auto addCollection = [&account](const QString &kind, const QString &name, const QString &color, bool events, bool todos) {
+        DavCollection c;
+        c.accountId = account.id;
+        c.kind = kind;
+        c.href = QStringLiteral("https://dav.example.org/demo/") + name + QLatin1Char('/');
+        c.name = name;
+        c.color = color;
+        c.hasEvents = events;
+        c.hasTodos = todos;
+        return DavStore::saveCollection(c);
+    };
+    const qint64 personal = addCollection(QStringLiteral("calendar"), QStringLiteral("Persönlich"), QStringLiteral("#6366f1"), true, true);
+    const qint64 work = addCollection(QStringLiteral("calendar"), QStringLiteral("Arbeit"), QStringLiteral("#10b981"), true, true);
+    const qint64 book = addCollection(QStringLiteral("addressbook"), QStringLiteral("Kontakte"), QString(), false, false);
+
+    const QDate today = QDate::currentDate();
+    const auto at = [&today](int days, int hour, int minute = 0) {
+        return QDateTime(today.addDays(days), QTime(hour, minute));
+    };
+    addDemoEvent(work, QStringLiteral("demo-standup"), at(-today.dayOfWeek() + 1, 9, 30), 15, QStringLiteral("Stand-up"), QStringLiteral("Videokonferenz"), QStringLiteral("daily"));
+    addDemoEvent(work, QStringLiteral("demo-review"), at(0, 14), 60, QStringLiteral("Projekttreffen"), QStringLiteral("Raum Nordsee"));
+    addDemoEvent(personal, QStringLiteral("demo-dentist"), at(2, 11), 45, QStringLiteral("Zahnarzt"), QStringLiteral("Hafenstraße 3"));
+    addDemoEvent(personal, QStringLiteral("demo-trip"), at(4, 0), 0, QStringLiteral("Wochenende an der Küste"), QString(), QStringLiteral("none"), true);
+    addDemoEvent(personal, QStringLiteral("demo-sport"), at(1, 18), 90, QStringLiteral("Lauftreff"), QStringLiteral("Stadtpark"), QStringLiteral("weekly"));
+
+    addDemoTask(work, QStringLiteral("demo-task-1"), QStringLiteral("Zeitplan an Thomas schicken"), at(0, 17), 1);
+    addDemoTask(work, QStringLiteral("demo-task-2"), QStringLiteral("Release-Notizen schreiben"), at(3, 12), 5);
+    addDemoTask(personal, QStringLiteral("demo-task-3"), QStringLiteral("Bahnticket ausdrucken"), at(-1, 12), 0);
+    addDemoTask(personal, QStringLiteral("demo-task-4"), QStringLiteral("Fotos sortieren"), QDateTime(), 0);
+
+    addDemoContact(book, QStringLiteral("demo-anna"), QStringLiteral("Anna Becker"), QStringLiteral("Fjordblau GmbH"), QStringLiteral("Projektleitung"), QStringLiteral("anna.becker@example.org"), QStringLiteral("+49 40 1234567"));
+    addDemoContact(book, QStringLiteral("demo-thomas"), QStringLiteral("Thomas Wagner"), QStringLiteral("Wagner Webdesign"), QStringLiteral("Inhaber"), QStringLiteral("t.wagner@example.com"), QStringLiteral("+49 30 7654321"));
+    addDemoContact(book, QStringLiteral("demo-lisa"), QStringLiteral("Lisa Hoffmann"), QString(), QString(), QStringLiteral("lisa@hoffmann.example"), QStringLiteral("+49 170 5550123"));
+    addDemoContact(book, QStringLiteral("demo-markus"), QStringLiteral("Markus Klein"), QStringLiteral("Hosting GmbH"), QStringLiteral("Administrator"), QStringLiteral("markus.klein@example.net"), QStringLiteral("+49 89 1112223"));
+
+    insertDemoInvitation(mailAccountId, inbox, email, at(3, 10));
+}
+
 } // namespace
 
 void seedDemoData(AccountManager &accounts)
@@ -195,6 +334,14 @@ void seedDemoData(AccountManager &accounts)
     assign(invoices, QStringLiteral("Rechnung%"));
     assign(projects, QStringLiteral("%Release-Termin%"));
     assign(projects, QStringLiteral("Treffen am Donnerstag"));
+
+    const Account first = accounts.accounts().constFirst();
+    QSqlQuery inbox(db);
+    inbox.prepare(QStringLiteral("SELECT id FROM folders WHERE account_id = ? AND role = 'inbox'"));
+    inbox.addBindValue(first.id);
+    inbox.exec();
+    if (inbox.next())
+        seedPim(first.id, first.email, inbox.value(0).toLongLong());
     db.commit();
 }
 

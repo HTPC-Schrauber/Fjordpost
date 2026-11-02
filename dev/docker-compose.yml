@@ -5,6 +5,8 @@
 # werden lokal zugestellt. Testkonten (Benutzername = E-Mail-Adresse):
 #   max@fjordpost.test / geheim
 #   anna@fjordpost.test / geheim
+# Radicale: CalDAV/CardDAV auf Port 5232, Konto max / geheim; Inhalte gehen beim
+# Neustart des Containers verloren (Ablage unter /tmp).
 # Ports: IMAP 3143 (unverschlüsselt), IMAPS 3993, POP3 3110, POP3S 3995,
 #        SMTP 3025 (unverschlüsselt), SMTPS 3465
 services:
@@ -25,3 +27,9 @@ services:
       - "3465:3465"
       - "3993:3993"
       - "3995:3995"
+  radicale:
+    image: tomsquest/docker-radicale:3.5.1.0
+    volumes:
+      - ./radicale:/config:ro
+    ports:
+      - "5232:5232"

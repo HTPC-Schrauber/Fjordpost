@@ -1,8 +1,10 @@
 #include "core/accountmanager.h"
 #include "core/secretstore.h"
+#include "dav/davservice.h"
 #include "integration/accountsetup.h"
 #include "integration/appcontroller.h"
 #include "integration/notifier.h"
+#include "integration/pimcontroller.h"
 #include "integration/remotecontentblocker.h"
 #include "mail/mailservice.h"
 #include "fjordpost-version.h"
@@ -73,7 +75,7 @@ int main(int argc, char *argv[])
     parser.addOption(demoOption);
     parser.addOption(dataDirOption);
     parser.addOption(offlineOption);
-    QCommandLineOption devActionOption(QStringLiteral("dev-action"), i18n("Trigger a UI action before the screenshot (open-first, compose, compose-window, reply, setup, settings, light, undo-send, open-thread, expand-thread, thread-history, label-menu, label-dialog, label-filter, snooze-menu, snooze-date, snoozed, filter-rules, filter-rule)."), i18n("action"));
+    QCommandLineOption devActionOption(QStringLiteral("dev-action"), i18n("Trigger a UI action before the screenshot (open-first, compose, compose-window, reply, setup, settings, light, undo-send, open-thread, expand-thread, thread-history, label-menu, label-dialog, label-filter, snooze-menu, snooze-date, snoozed, filter-rules, filter-rule, compose-completion, calendar, calendar-week, calendar-event, contacts, contact-edit, tasks, task-edit, dav-account, invitation)."), i18n("action"));
     parser.addOption(screenshotOption);
     parser.addOption(devActionOption);
     about.setupCommandLine(&parser);
@@ -100,6 +102,11 @@ int main(int argc, char *argv[])
     AccountSetup setup(&accounts, &secrets);
     AppController controller(&accounts, &mail, &setup);
     Notifier notifier;
+    DavService dav(&secrets);
+    PimController pim(&accounts, &mail, &dav);
+    controller.setPim(&pim);
+    QObject::connect(&controller, &AppController::syncRequested, &dav, &DavService::syncAll);
+    QObject::connect(&dav, &DavService::reminder, &notifier, &Notifier::notifyReminder);
 
     // Externe Inhalte in Mails nur nach Freigabe laden
     auto *blocker = new RemoteContentBlocker(&app);
@@ -133,7 +140,10 @@ int main(int argc, char *argv[])
     QObject::connect(&notifier, &Notifier::activateRequested, window, activateWindow);
 
     if (!parser.isSet(offlineOption) && !parser.isSet(screenshotOption))
+    {
         mail.start();
+        dav.start();
+    }
 
     if (parser.isSet(devActionOption)) {
         const QString action = parser.value(devActionOption);

@@ -28,6 +28,7 @@ class AppController : public QObject
     Q_PROPERTY(QObject *labels READ labelsObject CONSTANT)
     Q_PROPERTY(qint64 selectedLabelId READ selectedLabelId NOTIFY selectionChanged)
     Q_PROPERTY(QObject *accountSetup READ accountSetupObject CONSTANT)
+    Q_PROPERTY(QObject *pim READ pimObject CONSTANT)
     Q_PROPERTY(bool hasAccounts READ hasAccounts NOTIFY accountsChanged)
     Q_PROPERTY(qint64 selectedAccountId READ selectedAccountId NOTIFY selectionChanged)
     Q_PROPERTY(qint64 selectedFolderId READ selectedFolderId NOTIFY selectionChanged)
@@ -58,6 +59,9 @@ public:
     QObject *labelsObject() const;
     qint64 selectedLabelId() const { return m_labelId; }
     QObject *accountSetupObject() const;
+    QObject *pimObject() const { return m_pim; }
+    // Vor dem Laden der Oberfläche setzen
+    void setPim(QObject *pim) { m_pim = pim; }
 
     bool hasAccounts() const;
     qint64 selectedAccountId() const { return m_accountId; }
@@ -176,6 +180,8 @@ Q_SIGNALS:
     void undoSendSecondsChanged();
     void conversationViewChanged();
     void transferChanged();
+    // Manueller Abgleich: auch Kalender und Kontakte
+    void syncRequested();
     // draft enthält die Composer-Daten, um die Nachricht nach dem Rückgängigmachen
     // wieder zu öffnen.
     void messageQueued(qint64 outboxId, int delaySeconds, const QVariantMap &draft);
@@ -204,6 +210,7 @@ private:
     MessageListModel *m_messageModel;
     LabelModel *m_labelModel;
     MailTransfer *m_transfer;
+    QObject *m_pim = nullptr;
 
     qint64 m_accountId = 0;
     qint64 m_folderId = 0;

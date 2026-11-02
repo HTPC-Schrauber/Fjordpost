@@ -245,6 +245,7 @@ void AppController::syncNow()
         m_mail->syncAccount(m_accountId);
     else
         m_mail->syncAll();
+    Q_EMIT syncRequested();
 }
 
 void AppController::setSearchText(const QString &text)
@@ -1032,6 +1033,7 @@ QVariantList AppController::identities() const
         const QString name = a.displayName.isEmpty() ? a.email : QStringLiteral("%1 <%2>").arg(a.displayName, a.email);
         result << QVariantMap{{QStringLiteral("accountId"), a.id},
                               {QStringLiteral("text"), name},
+                              {QStringLiteral("email"), a.email},
                               {QStringLiteral("color"), a.color},
                               {QStringLiteral("signature"), a.signature}};
     }

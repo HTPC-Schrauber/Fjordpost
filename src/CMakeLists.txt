@@ -9,6 +9,13 @@ add_library(fjordpostcore STATIC
     storage/mailstore.cpp
     storage/labelstore.cpp
     storage/filterstore.cpp
+    storage/davstore.cpp
+    dav/davclient.cpp
+    dav/davdiscovery.cpp
+    dav/davsync.cpp
+    dav/davservice.cpp
+    pim/pimdata.cpp
+    pim/itip.cpp
     mail/autoconfig/autoconfig.cpp
     mail/filterengine.cpp
     mail/imap/imapaccount.cpp
@@ -23,12 +30,14 @@ add_library(fjordpostcore STATIC
     mail/pop3/pop3client.cpp
     mail/smtp/smtpsender.cpp
     models/accountmodel.cpp
+    models/contactmodel.cpp
     models/foldermodel.cpp
     models/labelmodel.cpp
     models/messagelistmodel.cpp
     integration/accountsetup.cpp
     integration/appcontroller.cpp
     integration/colorscheme.cpp
+    integration/pimcontroller.cpp
     integration/notifier.cpp
 )
 target_include_directories(fjordpostcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
@@ -37,6 +46,7 @@ target_link_libraries(fjordpostcore PUBLIC
     KF6::CoreAddons KF6::I18n KF6::ConfigCore KF6::ColorScheme KF6::Notifications KF6::StatusNotifierItem
     Qt6Keychain::Qt6Keychain
     KPim6::Mime KPim6::IMAP
+    KF6::CalendarCore KF6::Contacts
 )
 
 add_executable(fjordpost main.cpp integration/remotecontentblocker.cpp)
@@ -66,17 +76,30 @@ ecm_target_qml_sources(fjordpost SOURCES
     qml/ComposerWindow.qml
     qml/SettingsDialog.qml
     qml/AccountSetupDialog.qml
+    qml/CalendarPage.qml
+    qml/ContactsPage.qml
+    qml/TasksPage.qml
+    qml/EventDialog.qml
+    qml/ContactDialog.qml
+    qml/TaskDialog.qml
+    qml/DavAccountDialog.qml
+    qml/InvitationCard.qml
 )
 ecm_target_qml_sources(fjordpost PATH components SOURCES
     qml/components/AccentButton.qml
     qml/components/IconButton.qml
     qml/components/InitialsAvatar.qml
     qml/components/Kbd.qml
+    qml/components/CollectionDialog.qml
+    qml/components/CollectionList.qml
+    qml/components/DateTimeField.qml
     qml/components/Pill.qml
     qml/components/SearchBox.qml
     qml/components/SectionLabel.qml
     qml/components/Tag.qml
+    qml/components/TaskCheck.qml
     qml/components/ThemedDialog.qml
+    qml/components/TransferDialog.qml
     qml/components/Toast.qml
 )
 

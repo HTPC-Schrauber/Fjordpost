@@ -24,7 +24,8 @@ build/bin/fjordpost --demo --offline --data-dir /tmp/fjordpost-demo
   Konten `max@fjordpost.test`/`anna@fjordpost.test`, Passwort `geheim`; IMAP 3143, SMTP 3025).
   Integrationstest dagegen: `FJORDPOST_TEST_SERVER=127.0.0.1 build/bin/servertest`
   (ohne die Variable wird er übersprungen). GreenMail akzeptiert jedes Passwort und hat
-  anfangs nur `INBOX`. POP3 läuft auf 3110; TLS (3995) lehnt der Client wegen des selbst signierten
+  anfangs nur `INBOX`. Radicale (CalDAV/CardDAV) läuft im selben Compose auf Port 5232, Konto `max`/`geheim`;
+  Test dagegen: `FJORDPOST_TEST_DAV=http://127.0.0.1:5232 build/bin/davtest realServer`. POP3 läuft auf 3110; TLS (3995) lehnt der Client wegen des selbst signierten
   Zertifikats ab, der Servertest prüft genau das.
 
 ### Entwickleroptionen von `fjordpost`
@@ -35,7 +36,7 @@ build/bin/fjordpost --demo --offline --data-dir /tmp/fjordpost-demo
 | `--offline` | keine Serververbindungen |
 | `--data-dir <dir>` | eigenes Datenverzeichnis (echte Daten nie für Tests nutzen) |
 | `--screenshot <png>` | Fenster nach 3 s als Bild speichern und beenden (startet auch neben laufender Instanz) |
-| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light`, `undo-send`, `open-thread`, `expand-thread`, `thread-history`, `label-menu`, `label-dialog`, `label-filter`, `snooze-menu`, `snooze-date`, `snoozed`, `filter-rules`, `filter-rule` |
+| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light`, `undo-send`, `open-thread`, `expand-thread`, `thread-history`, `label-menu`, `label-dialog`, `label-filter`, `snooze-menu`, `snooze-date`, `snoozed`, `filter-rules`, `filter-rule`, `compose-completion`, `calendar`, `calendar-week`, `calendar-event`, `collection-new`, `collection-edit`, `collection-delete`, `contacts`, `contact-edit`, `contact-transfer`, `tasks`, `task-edit`, `dav-account`, `invitation` |
 
 Oberflächenänderungen immer per `--screenshot` prüfen und die Konsolenausgabe auf
 QML-Warnungen kontrollieren. Achtung: `--dev-action light` speichert den hellen Modus in
@@ -48,7 +49,10 @@ src/
   core/         Account, AccountManager (DB), SecretStore (QtKeychain → KWallet)
   storage/      Database (Migrationen, FTS5), BlobStore (.eml-Dateien), MailStore (Sync-DB-Zugriffe),
                 LabelStore (Labels, auf dem Server als IMAP-Schlüsselwörter), FilterStore (Filterregeln),
-                messageflags.h (Flag-Bitmaske, Ordnerrollen), demodata
+                DavStore (Konten, Sammlungen, Ressourcen für DAV), messageflags.h (Flag-Bitmaske, Ordnerrollen), demodata
+  dav/          DavClient (WebDAV auf QNetworkAccessManager), DavDiscovery (Home-Sets, .well-known, SRV),
+                DavSync (Abgleich eines Kontos), DavService (alle Konten, Timer, Erinnerungen)
+  pim/          pimdata (iCalendar/vCard ↔ Felder, Serien auflösen), itip (Einladungen, RFC 5546)
   mail/
     imap/       ImapConnection (Login + serielle Task-Queue), ImapAccount (Sync, IDLE, Offline-Ops)
     pop3/       Pop3Client (Protokoll), Pop3Account (Abruf; Ordner nur lokal, Nachrichten mit uid 0)
@@ -59,8 +63,8 @@ src/
     mailservice MailService: koordiniert alle Konten, Postausgang, Snooze-Wecker
     filterengine FilterEngine: wendet Regeln auf neue Nachrichten an (nur Kopfzeilen-Felder)
     mailtransfer MailTransfer: Import/Export (.eml, mbox) nachrichtenweise im Hintergrund
-  models/       AccountModel, FolderModel, MessageListModel (für QML)
-  integration/  AppController (QML-Fassade "App"), AccountSetup, Notifier (KNotification,
+  models/       AccountModel, FolderModel, MessageListModel, ContactModel (für QML)
+  integration/  AppController (QML-Fassade "App"), PimController ("App.pim"), AccountSetup, Notifier (KNotification,
                 Tray, Taskleisten-Zähler), RemoteContentBlocker (WebEngine)
   qml/          Kirigami-Oberfläche; Theme.qml (Singleton mit Design-Tokens), components/
 tests/          QtTest; IMAP gegen KIMAPs FakeServer (KPim6::kimaptest6)
@@ -84,6 +88,19 @@ Grundprinzipien:
   (Änderungen wie Benutzeraktionen über `pending_ops`); Flags vor dem Verschieben, das die UID ungültig macht.
 - **POP3:** `uid = 0`, Inhalt immer im BlobStore; `pop3_uids` merkt abgerufene Nachrichten. Erst sichern,
   dann vermerken, dann `DELE`. `uid > 0` ist überall die Bedingung für Serveroperationen.
+- **CalDAV/CardDAV:** eigener Client statt KDAV (kein KIO, Bearer-Token für M4 einfach). Eine Zeile in
+  `dav_items` ist eine Ressource; `raw` ist die Wahrheit, alle anderen Spalten leitet `pim/pimdata` daraus ab.
+  Beim Bearbeiten wird `raw` geändert, nicht neu erzeugt (unbekannte Eigenschaften bleiben). Offline zuerst über
+  `dav_items.pending`: `DavSync` sendet erst und vergleicht dann per CTag/ETag; bei `412` gewinnt der Server.
+  Serien liegen als eine Ressource vor und werden nur als Ganzes bearbeitet. Einladungen gehen per Mail
+  (iTIP), außer der Server meldet `calendar-auto-schedule`. Sammlungen anlegen, bearbeiten und löschen geht direkt
+  zum Server und wird nicht vorgemerkt: Er darf ablehnen, und das muss sofort sichtbar sein. Kalender tragen nur `VEVENT`,
+  Aufgabenlisten nur `VTODO`. Verschieben ist Neuanlegen plus Löschen (Original zuerst, gleiche UID),
+  Kopieren vergibt eine neue UID und entfernt Teilnehmer; Termine mit Gästen werden bei `calendar-auto-schedule` nicht
+  verschoben, sonst bekämen alle Absage und Einladung. Farben: `calendar-color`; für Adressbücher gibt es nur die
+  Erweiterung `addressbook-color`, lehnt der Server sie ab, gilt die Farbe lokal. Google läuft in M4 über einen eigenen Weg.
+- **Daten von außen in QML** (Termintitel, Kontaktnamen, Einladungen) nur mit `textFormat: Text.PlainText`:
+  `Label` rendert sonst HTML, ein Titel könnte externe Bilder nachladen.
 - **Passwörter/Tokens** nur über `SecretStore`, nie in DB oder Konfiguration.
 
 ## Code-Konventionen
@@ -129,8 +146,16 @@ Grundprinzipien:
   (`find /usr/share/icons/breeze -name '<name>.svg'`).
 
 - `DatePopup` aus kirigamiaddons meldet massenhaft `DatePicker.qml:570: Unable to assign double to
-  QDateTime`, sobald es erzeugt wird; die Datumswahl funktioniert trotzdem (vom Projektinhaber bestätigt).
-  Daher nur per Loader bei Bedarf laden (`SnoozeDatePicker.qml`).
+  QDateTime` und ist im Theme schlecht lesbar: nicht verwenden, stattdessen `components/DateTimeField.qml`.
+- **Mehrere Datenbanken im selben Test** gehen nicht: `Database::connection()` gilt pro Thread und behält die
+  erste Datei. In Tests eine Datenbank verwenden und leeren.
+- **`Repeater` direkt im `Kirigami.FormLayout`** sortiert seine Zeilen ans Ende: in ein `ColumnLayout` legen.
+- `PROPPATCH` meldet Ablehnung als `207` mit dem Status pro Eigenschaft: `ok()` reicht dort nicht. `403` heißt bei Sammlungen
+  „nicht erlaubt“, nicht „falsches Passwort“.
+- `QNetworkReply::header(LocationHeader)` ist bei relativem `Location` leer: Umleitungen über `rawHeader("Location")` auflösen.
+- Die Datei-URL einer neuen DAV-Ressource nie aus der UID bilden; bei Einladungen kommt sie von außen.
+- `QQmlComponent: Cannot create new component instance before completing the previous` beim Start ist nicht neu
+  (auch ohne M3) und bisher ohne sichtbare Folgen.
 - mbox-Import: ohne Statuskopfzeile gilt eine Nachricht als gelesen; `Mbox::entry` schreibt deshalb immer `Status`.
 
 ## Design
@@ -154,7 +179,7 @@ Die Oberfläche folgt dem Entwurf `mopmail_ui.html` des Projektinhabers:
 | M0 | Grundgerüst, DB, Oberfläche mit Demo-Daten | fertig |
 | M1 | IMAP + SMTP, Kontoeinrichtung, Lesen/Schreiben, Design-Umbau | fertig, Servertest grün; manueller Oberflächentest offen |
 | M2 | POP3, Threading, Snooze, Labels, Filterregeln, Signaturen, Senden rückgängig, Import/Export | fertig, Servertest grün (auch POP3, Filter, Import/Export); manueller Oberflächentest offen |
-| M3 | CardDAV/CalDAV, Kalender, Kontakte, Aufgaben, Einladungen | geplant |
+| M3 | CardDAV/CalDAV, Kalender, Kontakte, Aufgaben, Einladungen | Code fertig, Test gegen Radicale grün; manueller Oberflächentest offen |
 | M4 | Google OAuth2 (Gmail, Kontakte, Kalender) | geplant |
 | M5 | OpenPGP + S/MIME (QGpgME) | geplant |
 | M6 | Übersetzung, Einstellungen, Feinschliff, Flatpak/PKGBUILD | geplant |
@@ -163,11 +188,14 @@ Die Oberfläche folgt dem Entwurf `mopmail_ui.html` des Projektinhabers:
 
 Vom Projektinhaber für später vorgemerkt, noch keinem Meilenstein fest zugeordnet:
 
-- **Farbschema und Lesbarkeit überarbeiten:** Die Lesbarkeit ist insgesamt nicht ideal, der
-  Datumswähler (`SnoozeDatePicker.qml`) ist besonders schlecht lesbar.
+- **Farbschema und Lesbarkeit überarbeiten:** Die Lesbarkeit ist insgesamt nicht ideal.
 - **Download-Zeitraum in den Einstellungen:** wählbar, wie viel vom Server geladen wird
   (X Tage/Wochen/Monate oder alles). Bisher fest: die neuesten `ImapAccount::initialHeaderLimit`
   Kopfzeilen je Ordner und `prefetchCount` Inhalte im Posteingang.
+
+- **Kalender ohne Server:** Bisher braucht jeder Kalender, jede Aufgabe und jeder Kontakt ein DAV-Konto;
+  ein rein lokaler Speicher fehlt noch.
+- **Einzelne Termine einer Serie bearbeiten:** Bisher wirkt jede Änderung auf die ganze Serie.
 
 ## Git
 

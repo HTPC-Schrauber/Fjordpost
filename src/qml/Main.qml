@@ -128,6 +128,45 @@ Kirigami.AbstractApplicationWindow {
         } else if (name === "undo-send") {
             messageList.openFirst();
             App.sendQuickReply("Test");
+        } else if (name === "compose-completion") {
+            compose(0, "new");
+            inlineComposer.item.showCompletionPreview();
+        } else if (name === "calendar") {
+            root.section = "calendar";
+        } else if (name === "calendar-week") {
+            root.section = "calendar";
+            calendarPage.view = "week";
+        } else if (name === "calendar-event") {
+            root.section = "calendar";
+            eventDialog.openNew(new Date(), false);
+        } else if (name === "collection-new") {
+            root.section = "calendar";
+            calendarPage.collections.create();
+        } else if (name === "collection-edit") {
+            root.section = "calendar";
+            calendarPage.collections.edit(calendarPage.collections.entries[0]);
+        } else if (name === "collection-delete") {
+            root.section = "calendar";
+            calendarPage.collections.remove(calendarPage.collections.entries[0]);
+        } else if (name === "contacts") {
+            root.section = "contacts";
+            contactsPage.selectedId = App.pim.contacts.data(App.pim.contacts.index(0, 0), Qt.UserRole + 1);
+        } else if (name === "contact-transfer") {
+            root.section = "contacts";
+            contactsPage.devTransfer();
+        } else if (name === "contact-edit") {
+            root.section = "contacts";
+            contactDialog.openNew("Eva Muster", "eva@example.org");
+        } else if (name === "tasks") {
+            root.section = "tasks";
+        } else if (name === "task-edit") {
+            root.section = "tasks";
+            taskDialog.openNew("Neue Aufgabe", "");
+        } else if (name === "dav-account") {
+            davAccountDialog.open();
+        } else if (name === "invitation") {
+            messageList.openFirst();
+            messageList.step(1);
         } else if (name === "setup") {
             accountSetup.open();
         } else if (name === "settings") {
@@ -147,6 +186,29 @@ Kirigami.AbstractApplicationWindow {
         id: settingsDialog
         parent: root.overlay
         onFilterRulesRequested: filterRules.open()
+        onAddDavAccountRequested: davAccountDialog.open()
+    }
+
+    EventDialog {
+        id: eventDialog
+        parent: root.overlay
+        onNotify: message => root.notify(message)
+    }
+
+    TaskDialog {
+        id: taskDialog
+        parent: root.overlay
+        onNotify: message => root.notify(message)
+    }
+
+    ContactDialog {
+        id: contactDialog
+        parent: root.overlay
+    }
+
+    DavAccountDialog {
+        id: davAccountDialog
+        parent: root.overlay
     }
 
     FilterRulesDialog {
@@ -224,96 +286,127 @@ Kirigami.AbstractApplicationWindow {
             AppRail {
                 Layout.fillHeight: true
                 section: root.section
-                onSectionRequested: name => {
-                    if (name === "mail")
-                        root.section = name;
-                    else
-                        root.notify(i18n("%1 will be available with CalDAV/CardDAV support.", name === "calendar" ? i18n("The calendar") : name === "contacts" ? i18n("The address book") : i18n("The task list")));
-                }
+                onSectionRequested: name => root.section = name
                 onSettingsRequested: settingsDialog.open()
                 onAddAccountRequested: accountSetup.open()
             }
 
-            QQC2.SplitView {
+            // Die Mailansicht bleibt geladen, damit Lesebereich und Composer erhalten bleiben.
+            StackLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                handle: Item {
-                    implicitWidth: 3
-                }
+                currentIndex: ["mail", "calendar", "contacts", "tasks"].indexOf(root.section)
 
-                FolderPane {
-                    QQC2.SplitView.preferredWidth: 240
-                    QQC2.SplitView.minimumWidth: 180
-                    onComposeRequested: root.compose(0, "new")
-                    onNewLabelRequested: labelDialog.openNew(0)
-                    onEditLabelRequested: (id, name, color) => labelDialog.openEdit(id, name, color)
-                    onFilterRulesRequested: filterRules.open()
-                }
-
-                MessageListPane {
-                    id: messageList
-                    QQC2.SplitView.preferredWidth: 370
-                    QQC2.SplitView.minimumWidth: 280
-                }
-
-                // Lesebereich; ein Composer im Hauptfenster liegt an derselben Stelle darüber.
-                Item {
-                    QQC2.SplitView.fillWidth: true
-                    QQC2.SplitView.minimumWidth: 380
-
-                    ReaderPane {
-                        id: readerPane
-                        anchors.fill: parent
-                        visible: !inlineComposer.active
-                        position: messageList.list.currentIndex
-                        total: messageList.list.count
-                        drawerVisible: Theme.settings.contextDrawer
-                        onReplyRequested: mode => root.compose(App.currentMessage.id, mode)
-                        onNavigate: delta => messageList.step(delta)
-                        onToggleDrawer: Theme.settings.contextDrawer = !Theme.settings.contextDrawer
-                        onNotify: message => root.notify(message)
-                        onNewLabelRequested: id => labelDialog.openNew(id)
+                QQC2.SplitView {
+                    handle: Item {
+                        implicitWidth: 3
                     }
 
-                    Loader {
-                        id: inlineComposer
-                        property var composeData: ({})
-                        // Beim Öffnen angezeigte Nachricht; nur ein Wechsel schließt den Composer.
-                        property var openedFor
-                        anchors.fill: parent
-                        active: false
-                        sourceComponent: ComposerForm {
-                            inline: true
-                            draft: inlineComposer.composeData
-                            onFinished: inlineComposer.active = false
+                    FolderPane {
+                        QQC2.SplitView.preferredWidth: 240
+                        QQC2.SplitView.minimumWidth: 180
+                        onComposeRequested: root.compose(0, "new")
+                        onNewLabelRequested: labelDialog.openNew(0)
+                        onEditLabelRequested: (id, name, color) => labelDialog.openEdit(id, name, color)
+                        onFilterRulesRequested: filterRules.open()
+                    }
+
+                    MessageListPane {
+                        id: messageList
+                        QQC2.SplitView.preferredWidth: 370
+                        QQC2.SplitView.minimumWidth: 280
+                    }
+
+                    // Lesebereich; ein Composer im Hauptfenster liegt an derselben Stelle darüber.
+                    Item {
+                        QQC2.SplitView.fillWidth: true
+                        QQC2.SplitView.minimumWidth: 380
+
+                        ReaderPane {
+                            id: readerPane
+                            anchors.fill: parent
+                            visible: !inlineComposer.active
+                            position: messageList.list.currentIndex
+                            total: messageList.list.count
+                            drawerVisible: Theme.settings.contextDrawer
+                            onReplyRequested: mode => root.compose(App.currentMessage.id, mode)
+                            onNavigate: delta => messageList.step(delta)
+                            onToggleDrawer: Theme.settings.contextDrawer = !Theme.settings.contextDrawer
                             onNotify: message => root.notify(message)
-                            onPopOutRequested: state => {
-                                inlineComposer.active = false;
-                                root.openComposer(state, true);
+                            onNewLabelRequested: id => labelDialog.openNew(id)
+                        }
+
+                        Loader {
+                            id: inlineComposer
+                            property var composeData: ({})
+                            // Beim Öffnen angezeigte Nachricht; nur ein Wechsel schließt den Composer.
+                            property var openedFor
+                            anchors.fill: parent
+                            active: false
+                            sourceComponent: ComposerForm {
+                                inline: true
+                                draft: inlineComposer.composeData
+                                onFinished: inlineComposer.active = false
+                                onNotify: message => root.notify(message)
+                                onPopOutRequested: state => {
+                                    inlineComposer.active = false;
+                                    root.openComposer(state, true);
+                                }
+                            }
+                        }
+
+                        // Wird eine andere Nachricht geöffnet, weicht ein unveränderter Composer.
+                        Connections {
+                            target: App
+                            function onCurrentMessageChanged() {
+                                if (!inlineComposer.item || App.currentMessage.id === undefined || App.currentMessage.id === inlineComposer.openedFor)
+                                    return;
+                                inlineComposer.openedFor = App.currentMessage.id;
+                                if (inlineComposer.item.dirty)
+                                    root.notify(i18n("Your message is still open: send it, save it as a draft or discard it."));
+                                else
+                                    inlineComposer.active = false;
                             }
                         }
                     }
 
-                    // Wird eine andere Nachricht geöffnet, weicht ein unveränderter Composer.
-                    Connections {
-                        target: App
-                        function onCurrentMessageChanged() {
-                            if (!inlineComposer.item || App.currentMessage.id === undefined || App.currentMessage.id === inlineComposer.openedFor)
-                                return;
-                            inlineComposer.openedFor = App.currentMessage.id;
-                            if (inlineComposer.item.dirty)
-                                root.notify(i18n("Your message is still open: send it, save it as a draft or discard it."));
-                            else
-                                inlineComposer.active = false;
-                        }
+                    ContextDrawer {
+                        visible: Theme.settings.contextDrawer
+                        QQC2.SplitView.preferredWidth: 288
+                        QQC2.SplitView.minimumWidth: 220
+                        onCloseRequested: Theme.settings.contextDrawer = false
+                    onNewTaskRequested: (summary, description) => taskDialog.openNew(summary, description)
+                    onNewContactRequested: (name, email) => contactDialog.openNew(name, email)
+                    onEditEventRequested: id => eventDialog.openEdit(id)
+                    onEditTaskRequested: id => taskDialog.openEdit(id)
+                    onNotify: message => root.notify(message)
                     }
                 }
 
-                ContextDrawer {
-                    visible: Theme.settings.contextDrawer
-                    QQC2.SplitView.preferredWidth: 288
-                    QQC2.SplitView.minimumWidth: 220
-                    onCloseRequested: Theme.settings.contextDrawer = false
+                CalendarPage {
+                    id: calendarPage
+                    onNewEventRequested: (start, allDay) => eventDialog.openNew(start, allDay)
+                    onEditEventRequested: id => eventDialog.openEdit(id)
+                    onAddAccountRequested: davAccountDialog.open()
+                }
+
+                ContactsPage {
+                    id: contactsPage
+                    onNewContactRequested: contactDialog.openNew("", "")
+                    onEditContactRequested: id => contactDialog.openEdit(id)
+                    onAddAccountRequested: davAccountDialog.open()
+                    onComposeRequested: address => {
+                        const data = App.composeData(0, "new");
+                        data.to = address;
+                        root.section = "mail";
+                        root.openComposer(data, false);
+                    }
+                }
+
+                TasksPage {
+                    onEditTaskRequested: id => taskDialog.openEdit(id)
+                    onAddAccountRequested: davAccountDialog.open()
+                    onNotify: message => root.notify(message)
                 }
             }
         }
@@ -357,16 +450,28 @@ Kirigami.AbstractApplicationWindow {
     }
     Shortcut {
         sequence: "L"
-        enabled: App.currentMessage.id !== undefined && !inlineComposer.active
+        enabled: root.section === "mail" && App.currentMessage.id !== undefined && !inlineComposer.active
         onActivated: readerPane.openLabelMenu()
     }
     Shortcut {
         sequence: "B"
-        enabled: App.currentMessage.id !== undefined && !inlineComposer.active
+        enabled: root.section === "mail" && App.currentMessage.id !== undefined && !inlineComposer.active
         onActivated: readerPane.openSnoozeMenu()
     }
     Shortcut {
         sequence: "Ctrl+1"
         onActivated: root.section = "mail"
+    }
+    Shortcut {
+        sequence: "Ctrl+2"
+        onActivated: root.section = "calendar"
+    }
+    Shortcut {
+        sequence: "Ctrl+3"
+        onActivated: root.section = "contacts"
+    }
+    Shortcut {
+        sequence: "Ctrl+4"
+        onActivated: root.section = "tasks"
     }
 }

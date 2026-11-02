@@ -38,6 +38,7 @@ struct ParsedMessage {
     QString html;
     QList<AttachmentInfo> attachments;
     QString snippet;
+    QByteArray calendarData; // text/calendar-Teil (Einladung), sonst leer
 };
 
 namespace MessageParser {

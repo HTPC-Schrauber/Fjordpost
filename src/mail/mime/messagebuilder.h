@@ -20,6 +20,9 @@ struct OutgoingMessage {
     QStringList attachmentPaths;
     QByteArray inReplyTo;
     QList<QByteArray> references;
+    // Einladung: wird als text/calendar neben dem Text eingefügt
+    QByteArray calendarData;
+    QString calendarMethod; // "REQUEST", "REPLY", "CANCEL"
 };
 
 namespace MessageBuilder {

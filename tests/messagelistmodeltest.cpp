@@ -34,7 +34,7 @@ private Q_SLOTS:
         MessageListModel model;
         model.setFilter({});
         // 8 Mails je Konto, dazu zwei bzw. vier aus den Demo-Konversationen
-        QCOMPARE(model.rowCount(), 3 * 8 + 2 + 4);
+        QCOMPARE(model.rowCount(), 3 * 8 + 2 + 4 + 1);
 
         // Absteigend nach Datum sortiert
         for (int i = 1; i < model.rowCount(); ++i) {
@@ -49,7 +49,7 @@ private Q_SLOTS:
         MessageListModel::Filter f;
         f.accountId = m_accounts.accounts().first().id;
         model.setFilter(f);
-        QCOMPARE(model.rowCount(), 10);
+        QCOMPARE(model.rowCount(), 11);
     }
 
     void conversationViewGroupsThreads()
@@ -60,7 +60,7 @@ private Q_SLOTS:
         f.threaded = true;
         model.setFilter(f);
         // Die beiden Posteingangs-Mails der Konversation werden eine Zeile
-        QCOMPARE(model.rowCount(), 9);
+        QCOMPARE(model.rowCount(), 10);
 
         int row = -1;
         for (int i = 0; i < model.rowCount(); ++i) {
@@ -78,19 +78,19 @@ private Q_SLOTS:
         // Aufklappen: die beiden älteren Nachrichten (eine aus "Gesendet") erscheinen darunter
         const qint64 latest = idx.data(MessageListModel::MessageIdRole).toLongLong();
         model.toggleThread(latest);
-        QCOMPARE(model.rowCount(), 11);
+        QCOMPARE(model.rowCount(), 12);
         QVERIFY(model.index(row).data(MessageListModel::ExpandedRole).toBool());
         QVERIFY(model.index(row + 1).data(MessageListModel::IsChildRole).toBool());
         QVERIFY(model.index(row + 2).data(MessageListModel::IsChildRole).toBool());
         QVERIFY(model.index(row + 1).data(MessageListModel::SentRole).toBool());
         QCOMPARE(model.index(row + 1).data(MessageListModel::DateGroupRole), idx.data(MessageListModel::DateGroupRole));
         model.toggleThread(latest);
-        QCOMPARE(model.rowCount(), 9);
+        QCOMPARE(model.rowCount(), 10);
 
         // Ohne Konversationsansicht wieder einzelne Nachrichten
         f.threaded = false;
         model.setFilter(f);
-        QCOMPARE(model.rowCount(), 10);
+        QCOMPARE(model.rowCount(), 11);
     }
 
     void labelFilterShowsLabeledMessages()

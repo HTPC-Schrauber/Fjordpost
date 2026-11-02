@@ -11,3 +11,11 @@ Comment=A new message has arrived
 Comment[de]=Eine neue Nachricht ist eingetroffen
 Sound=Oxygen-Im-New-Mail.ogg
 Action=Popup|Sound
+
+[Event/reminder]
+Name=Reminder
+Name[de]=Erinnerung
+Comment=An event or task is coming up
+Comment[de]=Ein Termin oder eine Aufgabe steht an
+Sound=Oxygen-Sys-App-Message.ogg
+Action=Popup|Sound

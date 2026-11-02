@@ -635,6 +635,15 @@ Rectangle {
         }
 
         // Nachrichtentext
+        InvitationCard {
+            Layout.fillWidth: true
+            Layout.leftMargin: 28
+            Layout.rightMargin: 28
+            Layout.topMargin: 8
+            messageId: pane.hasMessage ? pane.msg.id : 0
+            onNotify: message => pane.notify(message)
+        }
+
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true

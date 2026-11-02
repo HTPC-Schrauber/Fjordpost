@@ -202,6 +202,60 @@ const char *const migrations[] = {
         PRIMARY KEY (account_id, uidl)
     );
     )SQL",
+    // v7: CalDAV/CardDAV (Kalender, Aufgaben, Kontakte). pending: 0 = abgeglichen,
+    // 1 = neu anlegen, 2 = ändern, 3 = löschen; range_end NULL = endlose Serie.
+    R"SQL(
+    CREATE TABLE dav_accounts (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        name              TEXT NOT NULL,
+        url               TEXT NOT NULL,
+        username          TEXT NOT NULL DEFAULT '',
+        mail_account_id   INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+        calendar_home     TEXT NOT NULL DEFAULT '',
+        addressbook_home  TEXT NOT NULL DEFAULT '',
+        auto_schedule     INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE dav_collections (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id  INTEGER NOT NULL REFERENCES dav_accounts(id) ON DELETE CASCADE,
+        kind        TEXT NOT NULL,
+        href        TEXT NOT NULL,
+        name        TEXT NOT NULL DEFAULT '',
+        color       TEXT NOT NULL DEFAULT '',
+        ctag        TEXT NOT NULL DEFAULT '',
+        has_events  INTEGER NOT NULL DEFAULT 0,
+        has_todos   INTEGER NOT NULL DEFAULT 0,
+        read_only   INTEGER NOT NULL DEFAULT 0,
+        visible     INTEGER NOT NULL DEFAULT 1,
+        UNIQUE (account_id, href)
+    );
+    CREATE TABLE dav_items (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        collection_id  INTEGER NOT NULL REFERENCES dav_collections(id) ON DELETE CASCADE,
+        kind           TEXT NOT NULL,
+        href           TEXT NOT NULL,
+        etag           TEXT NOT NULL DEFAULT '',
+        uid            TEXT NOT NULL DEFAULT '',
+        raw            TEXT NOT NULL DEFAULT '',
+        pending        INTEGER NOT NULL DEFAULT 0,
+        title          TEXT NOT NULL DEFAULT '',
+        subtitle       TEXT NOT NULL DEFAULT '',
+        range_start    INTEGER NOT NULL DEFAULT 0,
+        range_end      INTEGER,
+        has_alarm      INTEGER NOT NULL DEFAULT 0,
+        due            INTEGER NOT NULL DEFAULT 0,
+        completed      INTEGER NOT NULL DEFAULT 0,
+        priority       INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (collection_id, href)
+    );
+    CREATE INDEX idx_dav_items_range ON dav_items(kind, range_start, range_end);
+    CREATE INDEX idx_dav_items_uid ON dav_items(uid);
+    CREATE TABLE dav_item_emails (
+        item_id  INTEGER NOT NULL REFERENCES dav_items(id) ON DELETE CASCADE,
+        email    TEXT NOT NULL
+    );
+    CREATE INDEX idx_dav_item_emails ON dav_item_emails(email);
+    )SQL",
 };
 
 constexpr int migrationCount = int(sizeof(migrations) / sizeof(migrations[0]));

@@ -27,6 +27,14 @@ C++20 · Qt 6 · KDE Frameworks 6 · Kirigami · SQLite
 - Signaturen je Konto, „Senden rückgängig“ (einstellbar)
 - HTML-Mails mit blockierten externen Inhalten (auf Wunsch nachladbar)
 
+**Kalender, Kontakte, Aufgaben**
+- CalDAV/CardDAV-Abgleich (z. B. Nextcloud) mit automatischer Servererkennung und Offline-Betrieb
+- Kalender mit Monats- und Wochenansicht, wiederkehrenden Terminen und Erinnerungen
+- Adressbuch mit Suche, Adressvervollständigung im Composer
+- Aufgabenlisten mit Fälligkeit und Priorität
+- Einladungen beantworten und selbst verschicken (iTIP per Mail oder über den Server)
+- Seitenleiste mit Kontaktdaten des Absenders, Tagesübersicht und offenen Aufgaben
+
 **KDE-Integration**
 - Passwörter in KWallet (über QtKeychain), nie in Datei oder Datenbank
 - Benachrichtigungen, Symbol im Systemabschnitt, Zähler in der Taskleiste
@@ -40,7 +48,7 @@ C++20 · Qt 6 · KDE Frameworks 6 · Kirigami · SQLite
 | M0 | Grundgerüst, Datenbank, Oberfläche mit Demo-Daten | ✅ |
 | M1 | IMAP + SMTP, Kontoeinrichtung, Lesen/Schreiben | ✅ |
 | M2 | Signaturen, Senden rückgängig, Konversationen, Labels, Snooze, Filterregeln, POP3, Import/Export | fertig ✅ |
-| M3 | CardDAV / CalDAV: Kalender, Kontakte, Aufgaben, Einladungen | geplant |
+| M3 | CardDAV / CalDAV: Kalender, Kontakte, Aufgaben, Einladungen | Code fertig, Test gegen Radicale grün, manueller Oberflächentest offen |
 | M4 | Google (OAuth2 für Gmail, Kontakte, Kalender) | geplant |
 | M5 | OpenPGP + S/MIME | geplant |
 | M6 | Übersetzungen, Feinschliff, Pakete (Flatpak, PKGBUILD) | geplant |

@@ -12,7 +12,29 @@ Rectangle {
     readonly property var msg: App.currentMessage
     readonly property bool hasMessage: msg.id !== undefined
 
+    // Bekannter Kontakt zum Absender (leer, wenn nicht im Adressbuch)
+    readonly property var contact: {
+        App.pim.revision;
+        return hasMessage ? App.pim.contactByEmail(msg.fromEmail) : ({});
+    }
+    readonly property bool hasContact: contact.itemId !== undefined
+    readonly property var agenda: {
+        App.pim.revision;
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        return App.pim.occurrences(start.getTime(), start.getTime() + 86400000);
+    }
+    readonly property var openTasks: {
+        App.pim.revision;
+        return App.pim.tasks(0, false).slice(0, 5);
+    }
+
     signal closeRequested()
+    signal newTaskRequested(string summary, string description)
+    signal newContactRequested(string name, string email)
+    signal editEventRequested(var itemId)
+    signal editTaskRequested(var itemId)
+    signal notify(string message)
 
     color: Theme.sidebar
 
@@ -72,6 +94,7 @@ Rectangle {
                         initials: drawer.hasMessage ? Theme.initials(drawer.msg.fromName) : "–"
                     }
                     QQC2.Label {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
                         text: drawer.hasMessage ? drawer.msg.fromName : i18n("No message selected")
@@ -81,6 +104,7 @@ Rectangle {
                         elide: Text.ElideRight
                     }
                     QQC2.Label {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         visible: drawer.hasMessage
                         horizontalAlignment: Text.AlignHCenter
@@ -90,10 +114,36 @@ Rectangle {
                         color: Theme.textMuted
                         elide: Text.ElideMiddle
                     }
+                    QQC2.Label {
+                        textFormat: Text.PlainText
+                        Layout.fillWidth: true
+                        visible: text.length > 0
+                        horizontalAlignment: Text.AlignHCenter
+                        text: drawer.hasContact ? [drawer.contact.jobTitle, drawer.contact.organization].filter(t => t && t.length > 0).join(" · ") : ""
+                        font.pointSize: Theme.fontXxs
+                        color: Theme.textSecondary
+                        wrapMode: Text.Wrap
+                    }
+                    QQC2.Label {
+                        textFormat: Text.PlainText
+                        Layout.fillWidth: true
+                        visible: drawer.hasContact && (drawer.contact.phones ?? []).length > 0
+                        horizontalAlignment: Text.AlignHCenter
+                        text: (drawer.contact.phones ?? [""])[0] ?? ""
+                        font.pointSize: Theme.fontXxs
+                        color: Theme.textSecondary
+                    }
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
                         visible: drawer.hasMessage
                         spacing: 8
+                        IconButton {
+                            visible: !drawer.hasContact && App.pim.hasDavAccounts
+                            iconName: "contact-new"
+                            iconSize: 14
+                            tooltip: i18n("Add to contacts")
+                            onClicked: drawer.newContactRequested(drawer.msg.fromName, drawer.msg.fromEmail)
+                        }
                         IconButton {
                             display: QQC2.AbstractButton.TextBesideIcon
                             iconName: "view-history"
@@ -118,6 +168,7 @@ Rectangle {
                         text: i18n("Today's Agenda")
                     }
                     QQC2.Label {
+                        textFormat: Text.PlainText
                         text: i18n("Today")
                         font.family: "monospace"
                         font.pointSize: Theme.fontXxs
@@ -125,7 +176,58 @@ Rectangle {
                     }
                 }
                 Placeholder {
+                    visible: !App.pim.hasDavAccounts
                     text: i18n("Your appointments appear here once a calendar (CalDAV) is connected.")
+                }
+                QQC2.Label {
+                    textFormat: Text.PlainText
+                    visible: App.pim.hasDavAccounts && drawer.agenda.length === 0
+                    text: i18n("Nothing scheduled today")
+                    font.pointSize: Theme.fontXs
+                    color: Theme.textMuted
+                }
+                Repeater {
+                    model: drawer.agenda
+                    delegate: QQC2.AbstractButton {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 38
+                        hoverEnabled: true
+                        onClicked: drawer.editEventRequested(modelData.itemId)
+                        background: Rectangle {
+                            radius: Theme.radiusSm
+                            color: parent.hovered ? Theme.card : "transparent"
+                        }
+                        contentItem: RowLayout {
+                            spacing: 8
+                            Rectangle {
+                                implicitWidth: 3
+                                Layout.fillHeight: true
+                                Layout.topMargin: 3
+                                Layout.bottomMargin: 3
+                                radius: 2
+                                color: modelData.color
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                                QQC2.Label {
+                                    textFormat: Text.PlainText
+                                    Layout.fillWidth: true
+                                    text: modelData.title
+                                    elide: Text.ElideRight
+                                    font.pointSize: Theme.fontXs
+                                    color: Theme.textPrimary
+                                }
+                                QQC2.Label {
+                                    textFormat: Text.PlainText
+                                    text: modelData.timeText
+                                    font.pointSize: Theme.fontXxs
+                                    color: Theme.textSecondary
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -136,11 +238,63 @@ Rectangle {
                 Layout.rightMargin: 16
                 Layout.bottomMargin: 16
                 spacing: 8
-                SectionLabel {
-                    text: i18n("Tasks")
+                RowLayout {
+                    SectionLabel {
+                        Layout.fillWidth: true
+                        text: i18n("Tasks")
+                    }
+                    IconButton {
+                        visible: App.pim.hasDavAccounts
+                        iconName: "list-add"
+                        iconSize: 12
+                        tooltip: drawer.hasMessage ? i18n("New task from this message") : i18n("New task")
+                        onClicked: drawer.newTaskRequested(drawer.hasMessage ? drawer.msg.subject : "", "")
+                    }
                 }
                 Placeholder {
-                    text: i18n("Tasks will be synchronized with your CalDAV server in a later version.")
+                    visible: !App.pim.hasDavAccounts
+                    text: i18n("Your tasks appear here once a calendar (CalDAV) is connected.")
+                }
+                QQC2.Label {
+                    textFormat: Text.PlainText
+                    visible: App.pim.hasDavAccounts && drawer.openTasks.length === 0
+                    text: i18n("Nothing to do")
+                    font.pointSize: Theme.fontXs
+                    color: Theme.textMuted
+                }
+                Repeater {
+                    model: drawer.openTasks
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 4
+                        TaskCheck {
+                            checked: false
+                            onToggled: {
+                                const error = App.pim.setTaskCompleted(parent.modelData.itemId, true);
+                                if (error.length > 0)
+                                    drawer.notify(error);
+                            }
+                        }
+                        QQC2.Label {
+                            textFormat: Text.PlainText
+                            Layout.fillWidth: true
+                            text: parent.modelData.title
+                            elide: Text.ElideRight
+                            font.pointSize: Theme.fontXs
+                            color: Theme.textPrimary
+                            TapHandler {
+                                onTapped: drawer.editTaskRequested(parent.parent.modelData.itemId)
+                            }
+                        }
+                        QQC2.Label {
+                            textFormat: Text.PlainText
+                            visible: text.length > 0
+                            text: parent.modelData.dueText
+                            font.pointSize: Theme.fontXxs
+                            color: parent.modelData.overdue ? Theme.danger : Theme.textSecondary
+                        }
+                    }
                 }
             }
         }
@@ -155,6 +309,7 @@ Rectangle {
         border.width: 1
         border.color: Theme.border
         QQC2.Label {
+            textFormat: Text.PlainText
             id: label
             anchors.fill: parent
             anchors.margins: 10

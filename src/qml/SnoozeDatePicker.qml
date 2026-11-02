@@ -1,55 +1,68 @@
 import QtQuick
 import QtQuick.Controls as QQC2
-import org.kde.kirigamiaddons.dateandtime as DateAndTime
+import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
 import de.fjordblau.fjordpost.core
+import "components"
 
-// Freie Weckzeit: erst das Datum, dann die Uhrzeit. Der Loader lädt die Popups erst
-// beim ersten Gebrauch, sonst meldet der Datumswähler schon beim Programmstart Warnungen.
-Item {
-    id: picker
+// Freie Weckzeit. Eigenes DateTimeField statt DatePopup aus kirigamiaddons: Das meldet beim
+// Öffnen massenhaft "Unable to assign double to QDateTime" und ist im Theme schlecht lesbar.
+ThemedDialog {
+    id: dialog
 
     property var messageId: 0
+    readonly property bool valid: whenField.value !== null && whenField.value.getTime() > Date.now()
 
     function openFor(id) {
         messageId = id;
-        loader.active = true;
-        loader.item.start();
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(8, 0, 0, 0);
+        whenField.value = tomorrow;
+        open();
     }
 
-    Loader {
-        id: loader
-        active: false
-        sourceComponent: Item {
-            function start() {
-                const tomorrow = new Date();
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                datePopup.value = tomorrow;
-                datePopup.open();
-            }
+    function accept() {
+        whenField.commit();
+        if (!valid)
+            return;
+        App.snoozeMessage(messageId, whenField.value.getTime());
+        close();
+    }
 
-            DateAndTime.DatePopup {
-                id: datePopup
-                parent: QQC2.Overlay.overlay
-                anchors.centerIn: parent
-                minimumDate: new Date()
-                onAccepted: {
-                    const time = new Date();
-                    time.setHours(8, 0, 0, 0);
-                    timePopup.value = time;
-                    timePopup.open();
-                }
-            }
+    parent: QQC2.Overlay.overlay
+    title: i18n("Snooze Until")
+    preferredWidth: Kirigami.Units.gridUnit * 20
+    padding: Kirigami.Units.largeSpacing * 2
+    standardButtons: Kirigami.Dialog.NoButton
 
-            DateAndTime.TimePopup {
-                id: timePopup
-                parent: QQC2.Overlay.overlay
-                anchors.centerIn: parent
-                onAccepted: {
-                    const when = new Date(datePopup.value);
-                    when.setHours(value.getHours(), value.getMinutes(), 0, 0);
-                    App.snoozeMessage(picker.messageId, when.getTime());
-                }
-            }
+    customFooterActions: [
+        Kirigami.Action {
+            text: i18n("Snooze")
+            icon.name: "dialog-ok"
+            enabled: dialog.valid
+            onTriggered: dialog.accept()
+        },
+        Kirigami.Action {
+            text: i18n("Cancel")
+            icon.name: "dialog-cancel"
+            onTriggered: dialog.close()
+        }
+    ]
+
+    ColumnLayout {
+        spacing: Kirigami.Units.smallSpacing
+        DateTimeField {
+            id: whenField
+            Layout.fillWidth: true
+        }
+        QQC2.Label {
+            Layout.fillWidth: true
+            visible: !dialog.valid
+            wrapMode: Text.Wrap
+            font.pointSize: Theme.fontXs
+            color: Theme.textMuted
+            text: i18n("Please choose a time in the future.")
         }
     }
 }

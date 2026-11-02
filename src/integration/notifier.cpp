@@ -3,6 +3,8 @@
 #include "storage/database.h"
 
 #include <KLocalizedString>
+#include <QLocale>
+
 #include <KNotification>
 #include <KStatusNotifierItem>
 
@@ -46,6 +48,16 @@ void Notifier::updateLauncherBadge(int count)
     signal << QStringLiteral("application://de.fjordblau.Fjordpost.desktop");
     signal << QVariantMap{{QStringLiteral("count"), qint64(count)}, {QStringLiteral("count-visible"), count > 0}};
     QDBusConnection::sessionBus().send(signal);
+}
+
+void Notifier::notifyReminder(const QString &title, const QDateTime &when)
+{
+    auto *notification = new KNotification(QStringLiteral("reminder"));
+    notification->setIconName(QStringLiteral("view-calendar"));
+    notification->setTitle(title);
+    notification->setText(QLocale().toString(when.toLocalTime(), QLocale::ShortFormat));
+    connect(notification->addDefaultAction(i18n("Show")), &KNotificationAction::activated, this, &Notifier::activateRequested);
+    notification->sendEvent();
 }
 
 void Notifier::notifyNewMessages(const QList<qint64> &messageIds)

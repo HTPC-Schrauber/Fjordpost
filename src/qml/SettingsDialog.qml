@@ -10,6 +10,9 @@ ThemedDialog {
     id: dialog
 
     signal filterRulesRequested()
+    signal addDavAccountRequested()
+
+    property var davAccounts: []
 
     title: i18n("Settings")
     preferredWidth: Kirigami.Units.gridUnit * 30
@@ -21,6 +24,7 @@ ThemedDialog {
         signatureAccount.model = App.identities();
         signatureAccount.currentIndex = Math.max(0, signatureAccount.indexOfValue(App.selectedAccountId));
         signatureText.load();
+        davAccounts = App.pim.davAccounts();
     }
     onClosed: signatureText.save()
 
@@ -131,6 +135,60 @@ ThemedDialog {
             valueRole: "value"
             Component.onCompleted: currentIndex = Math.max(0, indexOfValue(Prefs.compose.undoSendSeconds))
             onActivated: Prefs.compose.undoSendSeconds = currentValue
+        }
+
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Calendars and Contacts")
+        }
+
+        // Repeater direkt im FormLayout würde seine Zeilen ans Ende sortieren.
+        ColumnLayout {
+            Kirigami.FormData.label: i18n("Accounts:")
+            visible: dialog.davAccounts.length > 0
+            Layout.fillWidth: true
+            spacing: 4
+            Repeater {
+                model: dialog.davAccounts
+                RowLayout {
+                    id: davRow
+                    required property var modelData
+                    Layout.fillWidth: true
+                    QQC2.Label {
+                        text: davRow.modelData.name
+                        color: Theme.textPrimary
+                    }
+                    QQC2.ComboBox {
+                        Layout.fillWidth: true
+                        QQC2.ToolTip.text: i18n("Invitations are sent from this address")
+                        QQC2.ToolTip.visible: hovered
+                        model: [{ accountId: 0, text: i18n("No invitations") }].concat(App.identities())
+                        textRole: "text"
+                        valueRole: "accountId"
+                        Component.onCompleted: currentIndex = Math.max(0, indexOfValue(davRow.modelData.mailAccountId))
+                        onActivated: App.pim.setDavMailAccount(davRow.modelData.id, currentValue)
+                    }
+                    QQC2.ToolButton {
+                        icon.name: "edit-delete"
+                        QQC2.ToolTip.text: i18n("Remove account")
+                        QQC2.ToolTip.visible: hovered
+                        onClicked: {
+                            App.pim.removeDavAccount(davRow.modelData.id);
+                            dialog.davAccounts = App.pim.davAccounts();
+                        }
+                    }
+                }
+            }
+        }
+
+        QQC2.Button {
+            Kirigami.FormData.label: dialog.davAccounts.length === 0 ? i18n("Accounts:") : " "
+            text: i18n("Connect Account…")
+            icon.name: "list-add"
+            onClicked: {
+                dialog.close();
+                dialog.addDavAccountRequested();
+            }
         }
 
         Kirigami.Separator {
