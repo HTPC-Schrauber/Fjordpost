@@ -138,6 +138,11 @@ int main(int argc, char *argv[])
     };
     QObject::connect(&service, &KDBusService::activateRequested, window, activateWindow);
     QObject::connect(&notifier, &Notifier::activateRequested, window, activateWindow);
+    notifier.setQuitGuard([window] {
+        bool allowed = true;
+        QMetaObject::invokeMethod(window, "confirmQuit", Q_RETURN_ARG(bool, allowed));
+        return allowed;
+    });
 
     if (!parser.isSet(offlineOption) && !parser.isSet(screenshotOption))
     {

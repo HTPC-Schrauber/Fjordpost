@@ -31,6 +31,18 @@ ThemedDialog {
     Kirigami.FormLayout {
         Kirigami.Separator {
             Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("General")
+        }
+
+        QQC2.CheckBox {
+            Kirigami.FormData.label: i18n("Closing the window:")
+            text: i18n("Keep running in the system tray")
+            checked: Prefs.general.closeToTray
+            onToggled: Prefs.general.closeToTray = checked
+        }
+
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
             Kirigami.FormData.label: i18n("Appearance")
         }
 

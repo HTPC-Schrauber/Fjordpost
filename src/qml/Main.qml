@@ -15,6 +15,25 @@ Kirigami.AbstractApplicationWindow {
     minimumHeight: 560
     color: Theme.reading
 
+    // Das Tray-Symbol hält die App am Leben, sie endet also nicht von selbst mit dem letzten Fenster.
+    onClosing: close => {
+        if (Prefs.general.closeToTray)
+            return;
+        close.accepted = confirmQuit();
+        if (close.accepted)
+            Qt.quit();
+    }
+
+    // Entwürfe gehen bei IMAP asynchron zum Server: Beim Beenden lässt sich der Text nicht mehr sicher ablegen.
+    function confirmQuit(): bool {
+        if (!inlineComposer.item || !inlineComposer.item.dirty)
+            return true;
+        root.show();
+        root.raise();
+        root.notify(i18n("Your message is still open: send it, save it as a draft or discard it."));
+        return false;
+    }
+
     // Bedienelemente (Dialoge, Eingabefelder) an das Fjordpost-Theme anpassen
     Kirigami.Theme.inherit: false
     Kirigami.Theme.colorSet: Kirigami.Theme.View
@@ -82,8 +101,12 @@ Kirigami.AbstractApplicationWindow {
         });
         window.notify.connect(root.notify);
         window.closing.connect(close => {
-            if (close.accepted)
-                window.destroy();
+            if (!close.accepted)
+                return;
+            window.destroy();
+            // Das Beenden kann an der Rückfrage dieses Fensters hängen geblieben sein.
+            if (!root.visible && !Prefs.general.closeToTray)
+                Qt.quit();
         });
         window.show();
     }

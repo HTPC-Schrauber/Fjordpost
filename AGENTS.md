@@ -158,6 +158,9 @@ Grundprinzipien:
 - `QQmlComponent: Cannot create new component instance before completing the previous` beim Start ist nicht neu
   (auch ohne M3) und bisher ohne sichtbare Folgen.
 - mbox-Import: ohne Statuskopfzeile gilt eine Nachricht als gelesen; `Mbox::entry` schreibt deshalb immer `Status`.
+- `KStatusNotifierItem` hält die Event-Schleife am Leben: Die App endet nicht mit dem letzten Fenster, Beenden geht nur
+  ausdrücklich (`Qt.quit()`, `Prefs.general.closeToTray`). `grabWindow()` auf ein verborgenes Fenster stürzt ab.
+- `Settings`-Kategorie nie `General` nennen: `QSettings` behandelt die Gruppe gesondert (`[General]` sind Schlüssel ohne Gruppe).
 
 ## Design
 

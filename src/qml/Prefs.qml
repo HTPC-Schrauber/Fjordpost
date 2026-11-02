@@ -5,6 +5,12 @@ import QtCore
 
 // Allgemeine Einstellungen (Darstellung liegt in Theme.settings).
 QtObject {
+    readonly property Settings general: Settings {
+        category: "Behavior"
+        // Fenster schließen lässt die App im Tray weiterlaufen, sonst wird sie beendet
+        property bool closeToTray: true
+    }
+
     readonly property Settings view: Settings {
         category: "View"
         // Nachrichten zu Konversationen zusammenfassen

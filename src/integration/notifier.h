@@ -5,6 +5,8 @@
 #include <QObject>
 #include <QPointer>
 
+#include <functional>
+
 class KStatusNotifierItem;
 
 namespace Fjordpost {
@@ -18,6 +20,8 @@ public:
     explicit Notifier(QObject *parent = nullptr);
 
     void setUnreadCount(int count);
+    // Wird vor "Beenden" im Tray-Menü gefragt; false bricht das Beenden ab.
+    void setQuitGuard(std::function<bool()> guard);
     void notifyNewMessages(const QList<qint64> &messageIds);
     void notifyReminder(const QString &title, const QDateTime &when);
 
@@ -29,6 +33,7 @@ private:
     void updateLauncherBadge(int count);
 
     KStatusNotifierItem *m_tray;
+    std::function<bool()> m_quitGuard;
     int m_unread = -1;
 };
 

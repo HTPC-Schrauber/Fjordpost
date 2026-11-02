@@ -19,13 +19,24 @@ Notifier::Notifier(QObject *parent)
     , m_tray(new KStatusNotifierItem(QStringLiteral("fjordpost"), this))
 {
     m_tray->setCategory(KStatusNotifierItem::Communications);
+    // Immer aktiv: Plasma blendet passive Symbole aus, das Fenster wäre dann nicht mehr erreichbar.
+    m_tray->setStatus(KStatusNotifierItem::Active);
     m_tray->setTitle(QStringLiteral("Fjordpost"));
-    m_tray->setIconByName(QStringLiteral("mail-client"));
+    m_tray->setIconByName(QStringLiteral("mail-mark-read"));
     m_tray->setStandardActionsEnabled(true);
     // Fenster selbst ein-/ausblenden statt der Standard-Logik von KStatusNotifierItem
     m_tray->setAssociatedWindow(nullptr);
     connect(m_tray, &KStatusNotifierItem::activateRequested, this, &Notifier::activateRequested);
+    connect(m_tray, &KStatusNotifierItem::quitRequested, this, [this] {
+        if (m_quitGuard && !m_quitGuard())
+            m_tray->abortQuit();
+    });
     setUnreadCount(0);
+}
+
+void Notifier::setQuitGuard(std::function<bool()> guard)
+{
+    m_quitGuard = std::move(guard);
 }
 
 void Notifier::setUnreadCount(int count)
@@ -33,8 +44,8 @@ void Notifier::setUnreadCount(int count)
     if (count == m_unread)
         return;
     m_unread = count;
-    m_tray->setStatus(count > 0 ? KStatusNotifierItem::Active : KStatusNotifierItem::Passive);
-    m_tray->setIconByName(count > 0 ? QStringLiteral("mail-unread-new") : QStringLiteral("mail-client"));
+    // mail-client gibt es erst ab 48 px, im Panel bliebe der Platz leer.
+    m_tray->setIconByName(count > 0 ? QStringLiteral("mail-unread-new") : QStringLiteral("mail-mark-read"));
     m_tray->setToolTip(QStringLiteral("mail-client"), QStringLiteral("Fjordpost"),
                        count > 0 ? i18np("%1 unread message", "%1 unread messages", count) : i18n("No unread messages"));
     updateLauncherBadge(count);
