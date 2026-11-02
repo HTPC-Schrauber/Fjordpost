@@ -14,10 +14,15 @@ ecm_add_tests(
     LINK_LIBRARIES fjordpostcore Qt6::Test
 )
 
-ecm_add_test(imapsynctest.cpp
-    TEST_NAME imapsynctest
-    LINK_LIBRARIES fjordpostcore Qt6::Test KPim6::kimaptest6
-)
+# Arch/CachyOS liefern die Testbibliothek von KIMAP nicht mit.
+if(TARGET KPim6::kimaptest6)
+    ecm_add_test(imapsynctest.cpp
+        TEST_NAME imapsynctest
+        LINK_LIBRARIES fjordpostcore Qt6::Test KPim6::kimaptest6
+    )
+else()
+    message(STATUS "KPim6::kimaptest6 nicht gefunden: imapsynctest wird nicht gebaut")
+endif()
 
 # Gegen echten Server (GreenMail); wird ohne FJORDPOST_TEST_SERVER übersprungen.
 ecm_add_test(servertest.cpp

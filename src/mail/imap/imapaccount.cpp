@@ -1,6 +1,7 @@
 #include "imapaccount.h"
 
 #include "imapconnection.h"
+#include "mail/mime/kmimecompat.h"
 #include "mail/mime/messageparser.h"
 #include "storage/blobstore.h"
 #include "storage/database.h"
@@ -437,7 +438,7 @@ void ImapAccount::fetchBodies(KIMAP::Session *session, const QString &mailbox, c
             const qint64 id = uidToMessage.value(m.uid);
             if (id == 0 || !m.message)
                 continue;
-            const QByteArray raw = m.message->encodedContent(true);
+            const QByteArray raw = KMimeCompat::encodedWithCrlf(*m.message);
             const QString blob = BlobStore::store(m_account.id, QStringLiteral("imap"), raw);
             if (blob.isEmpty())
                 continue;

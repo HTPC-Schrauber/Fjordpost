@@ -1,6 +1,7 @@
 #include "messagebuilder.h"
 
 #include "fjordpost-version.h"
+#include "mail/mime/kmimecompat.h"
 
 #include <KLocalizedString>
 #include <KMime/Message>
@@ -40,10 +41,10 @@ void fillBody(KMime::Content &c, const OutgoingMessage &m)
         // Mailprogramme erkennen Einladungen am text/calendar-Teil mit method-Parameter.
         c.contentType()->setMimeType("multipart/alternative");
         c.contentType()->setBoundary(KMime::multiPartBoundary());
-        c.appendContent(textPart("text/plain", m.plainText));
+        KMimeCompat::appendPart(c, textPart("text/plain", m.plainText));
         auto *calendar = textPart("text/calendar", QString::fromUtf8(m.calendarData));
         calendar->contentType()->setParameter(QByteArrayLiteral("method"), m.calendarMethod);
-        c.appendContent(calendar);
+        KMimeCompat::appendPart(c, calendar);
         return;
     }
     if (m.html.isEmpty()) {
@@ -55,8 +56,8 @@ void fillBody(KMime::Content &c, const OutgoingMessage &m)
     }
     c.contentType()->setMimeType("multipart/alternative");
     c.contentType()->setBoundary(KMime::multiPartBoundary());
-    c.appendContent(textPart("text/plain", m.plainText));
-    c.appendContent(textPart("text/html", m.html));
+    KMimeCompat::appendPart(c, textPart("text/plain", m.plainText));
+    KMimeCompat::appendPart(c, textPart("text/html", m.html));
 }
 
 } // namespace
@@ -120,7 +121,7 @@ QByteArray build(const OutgoingMessage &m, QByteArray *messageId, QString *error
         msg.contentType()->setBoundary(KMime::multiPartBoundary());
         auto *body = new KMime::Content;
         fillBody(*body, m);
-        msg.appendContent(body);
+        KMimeCompat::appendPart(msg, body);
 
         QMimeDatabase mimeDb;
         for (const QString &path : m.attachmentPaths) {
@@ -137,7 +138,7 @@ QByteArray build(const OutgoingMessage &m, QByteArray *messageId, QString *error
             part->contentDisposition()->setFilename(QFileInfo(path).fileName());
             part->contentTransferEncoding()->setEncoding(KMime::Headers::CEbase64);
             part->setBody(file.readAll());
-            msg.appendContent(part);
+            KMimeCompat::appendPart(msg, part);
         }
     }
 

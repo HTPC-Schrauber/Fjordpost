@@ -17,6 +17,7 @@ build/bin/fjordpost --demo --offline --data-dir /tmp/fjordpost-demo
 ```
 
 - Entwicklung unter WSL2 (Debian 13, WSLg), Tests später auf CachyOS + Plasma.
+- Arch/CachyOS: `kimap` enthält `KPim6::kimaptest6` nicht, `imapsynctest` wird dort deshalb nicht gebaut.
 - Kein passwortloses `sudo`: Paketinstallation und Docker führt der Nutzer selbst aus
   (im Claude-Code-Prompt mit `! <befehl>`).
 - Der Build muss ohne Compiler-Warnungen durchlaufen (ECM-Warnflags sind aktiv).

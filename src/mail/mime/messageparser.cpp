@@ -1,5 +1,7 @@
 #include "messageparser.h"
 
+#include "mail/mime/kmimecompat.h"
+
 #include <KMime/Message>
 #include <KMime/Util>
 
@@ -10,7 +12,7 @@ namespace Fjordpost::MessageParser {
 
 namespace {
 
-QString mailboxList(const KMime::Types::Mailbox::List &list)
+QString mailboxList(const QList<KMime::Types::Mailbox> &list)
 {
     return KMime::Types::Mailbox::listToUnicodeString(list);
 }
@@ -80,7 +82,7 @@ static QByteArray findCalendar(const KMime::Content *content)
 {
     if (const auto *type = content->contentType(); type && !type->isMultipart()) {
         if (type->isMimeType("text/calendar") || type->isMimeType("application/ics"))
-            return content->decodedContent();
+            return KMimeCompat::decodedBody(content);
         return {};
     }
     const auto parts = content->contents();
@@ -115,7 +117,7 @@ ParsedMessage parse(const QByteArray &raw)
         a.index = i;
         a.fileName = attachmentName(c);
         a.mimeType = QString::fromLatin1(c->contentType()->mimeType());
-        a.size = c->decodedContent().size();
+        a.size = KMimeCompat::decodedBody(c).size();
         if (const auto *cid = c->contentID())
             a.contentId = QString::fromUtf8(cid->identifier());
         p.attachments << a;
@@ -134,7 +136,7 @@ QByteArray attachmentData(const QByteArray &raw, int index)
     const auto attachments = message.attachments();
     if (index < 0 || index >= attachments.size())
         return {};
-    return attachments.at(index)->decodedContent();
+    return KMimeCompat::decodedBody(attachments.at(index));
 }
 
 QString makeSnippet(const QString &plainText, const QString &html)

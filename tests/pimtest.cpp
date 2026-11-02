@@ -6,6 +6,7 @@
 #include "storage/davstore.h"
 
 #include <QTemporaryDir>
+#include <QRegularExpression>
 #include <QTest>
 #include <QTimeZone>
 
@@ -66,7 +67,7 @@ private Q_SLOTS:
                                                    {QStringLiteral("repeat"), QStringLiteral("custom")}},
                                                   QString());
         QVERIFY(raw.contains(QLatin1String("SUMMARY:Neu")));
-        QVERIFY(raw.contains(QLatin1String("X-CUSTOM:bleibt")));
+        QVERIFY(raw.contains(QRegularExpression(QStringLiteral("X-CUSTOM(;[^:\\r\\n]*)?:bleibt"))));
         QVERIFY(raw.contains(QLatin1String("RECURRENCE-ID")));
         QVERIFY(raw.contains(QLatin1String("FREQ=WEEKLY")));
     }

@@ -25,7 +25,15 @@ ecm_setup_version(${PROJECT_VERSION}
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Sql Network Widgets DBus WebEngineQuick Test)
 find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS CoreAddons I18n Config ColorScheme DBusAddons Crash Kirigami Notifications StatusNotifierItem CalendarCore Contacts)
 find_package(Qt6Keychain REQUIRED)
-find_package(KPim6Mime REQUIRED)
+# KMime ist in neueren Versionen ein KDE Framework, Debian 13 hat noch die KPim-Variante.
+find_package(KF6Mime QUIET)
+if(KF6Mime_FOUND)
+    set(KMIME_TARGET KF6::Mime)
+    add_compile_definitions(FJORDPOST_KMIME_FRAMEWORK)
+else()
+    find_package(KPim6Mime REQUIRED)
+    set(KMIME_TARGET KPim6::Mime)
+endif()
 find_package(KPim6IMAP REQUIRED)
 
 add_subdirectory(src)

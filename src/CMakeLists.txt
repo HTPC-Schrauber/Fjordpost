@@ -45,7 +45,7 @@ target_link_libraries(fjordpostcore PUBLIC
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Sql Qt6::Network Qt6::DBus
     KF6::CoreAddons KF6::I18n KF6::ConfigCore KF6::ColorScheme KF6::Notifications KF6::StatusNotifierItem
     Qt6Keychain::Qt6Keychain
-    KPim6::Mime KPim6::IMAP
+    ${KMIME_TARGET} KPim6::IMAP
     KF6::CalendarCore KF6::Contacts
 )
 
