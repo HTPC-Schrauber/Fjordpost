@@ -28,6 +28,8 @@ public:
     ~ImapConnection() override;
 
     void setCredentials(const Account &account, const QString &secret);
+    // OAuth: vor jeder Anmeldung ein frisches Token holen statt secret zu verwenden
+    void setTokenSource(TokenSource source) { m_tokenSource = std::move(source); }
     void enqueue(Task task, bool urgent = false);
     bool isBusy() const { return m_running || !m_queue.isEmpty(); }
 
@@ -53,10 +55,12 @@ Q_SIGNALS:
 private:
     void runNext();
     void login(std::function<void(bool)> then);
+    void loginWith(const QString &secret, std::function<void(bool)> then);
     void resetSession();
 
     Account m_account;
     QString m_secret;
+    TokenSource m_tokenSource;
     QString m_name;
     QPointer<KIMAP::Session> m_session;
     bool m_loggedIn = false;

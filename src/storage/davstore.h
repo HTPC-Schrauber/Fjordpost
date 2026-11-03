@@ -7,7 +7,7 @@
 
 namespace Fjordpost {
 
-// Ein CalDAV/CardDAV-Zugang. Das Passwort liegt im SecretStore (secretKey()).
+// Ein CalDAV/CardDAV-Zugang. Passwort bzw. Refresh-Token liegt im SecretStore (secretKey()).
 struct DavAccount {
     qint64 id = 0;
     QString name;
@@ -17,6 +17,7 @@ struct DavAccount {
     QString calendarHome;
     QString addressbookHome;
     bool autoSchedule = false; // Server verschickt Einladungen selbst (RFC 6638)
+    QString oauthProvider;     // leer = Passwort, sonst Bearer-Token (z. B. "google")
 
     QString secretKey() const { return QStringLiteral("dav-%1").arg(id); }
 };

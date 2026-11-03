@@ -1,3 +1,4 @@
+#include "auth/oauthtokens.h"
 #include "core/accountmanager.h"
 #include "core/secretstore.h"
 #include "dav/davservice.h"
@@ -75,7 +76,7 @@ int main(int argc, char *argv[])
     parser.addOption(demoOption);
     parser.addOption(dataDirOption);
     parser.addOption(offlineOption);
-    QCommandLineOption devActionOption(QStringLiteral("dev-action"), i18n("Trigger a UI action before the screenshot (open-first, compose, compose-window, reply, setup, settings, light, undo-send, open-thread, expand-thread, thread-history, label-menu, label-dialog, label-filter, snooze-menu, snooze-date, snoozed, filter-rules, filter-rule, compose-completion, calendar, calendar-week, calendar-event, contacts, contact-edit, tasks, task-edit, dav-account, invitation)."), i18n("action"));
+    QCommandLineOption devActionOption(QStringLiteral("dev-action"), i18n("Trigger a UI action before the screenshot (open-first, compose, compose-window, reply, setup, settings, light, undo-send, open-thread, expand-thread, thread-history, label-menu, label-dialog, label-filter, snooze-menu, snooze-date, snoozed, filter-rules, filter-rule, compose-completion, setup-oauth, calendar, calendar-week, calendar-event, contacts, contact-edit, tasks, task-edit, dav-account, invitation)."), i18n("action"));
     parser.addOption(screenshotOption);
     parser.addOption(devActionOption);
     about.setupCommandLine(&parser);
@@ -98,11 +99,17 @@ int main(int argc, char *argv[])
         seedDemoData(accounts);
 
     SecretStore secrets;
+    OAuthTokens tokens(&secrets);
     MailService mail(&accounts, &secrets);
+    mail.setTokens(&tokens);
     AccountSetup setup(&accounts, &secrets);
+    setup.setTokens(&tokens);
     AppController controller(&accounts, &mail, &setup);
+    controller.setTokens(&tokens);
     Notifier notifier;
     DavService dav(&secrets);
+    dav.setTokens(&tokens);
+    setup.setDav(&dav);
     PimController pim(&accounts, &mail, &dav);
     controller.setPim(&pim);
     QObject::connect(&controller, &AppController::syncRequested, &dav, &DavService::syncAll);

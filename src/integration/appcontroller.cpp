@@ -1,5 +1,6 @@
 #include "appcontroller.h"
 
+#include "auth/oauthtokens.h"
 #include "core/accountmanager.h"
 #include "integration/accountsetup.h"
 #include "integration/colorscheme.h"
@@ -14,6 +15,7 @@
 #include "models/messagelistmodel.h"
 #include "storage/blobstore.h"
 #include "storage/database.h"
+#include "storage/davstore.h"
 #include "storage/filterstore.h"
 #include "storage/labelstore.h"
 #include "storage/mailstore.h"
@@ -150,6 +152,7 @@ AppController::AppController(AccountManager *accounts, MailService *mail, Accoun
     });
     connect(accounts, &AccountManager::accountChanged, this, &AppController::accountsChanged);
 
+    connect(setup, &AccountSetup::warning, this, &AppController::setError);
     connect(mail, &MailService::syncingChanged, this, &AppController::syncingChanged);
     connect(mail, &MailService::errorOccurred, this, [this](qint64, const QString &message) {
         setError(message);
@@ -231,6 +234,80 @@ void AppController::setError(const QString &message)
         return;
     m_lastError = message;
     Q_EMIT lastErrorChanged();
+}
+
+void AppController::setTokens(OAuthTokens *tokens)
+{
+    m_tokens = tokens;
+    connect(tokens, &OAuthTokens::signInRequired, this, [this](const QString &secretKey) {
+        if (m_signInKey == secretKey || m_signInBusy)
+            return;
+        m_signInKey = secretKey;
+        Q_EMIT signInChanged();
+    });
+}
+
+QString AppController::signInNeeded() const
+{
+    if (m_signInKey.isEmpty())
+        return {};
+    const qint64 id = m_signInKey.section(QLatin1Char('-'), 1).toLongLong();
+    if (m_signInKey.startsWith(QLatin1String("dav-")))
+        return DavStore::account(id).name;
+    return m_accountManager->account(id).name;
+}
+
+void AppController::signInAgain()
+{
+    if (!m_tokens || m_signInKey.isEmpty() || m_signInBusy)
+        return;
+    const QString key = m_signInKey;
+    const qint64 id = key.section(QLatin1Char('-'), 1).toLongLong();
+    const bool dav = key.startsWith(QLatin1String("dav-"));
+    QString providerId;
+    QString hint;
+    if (dav) {
+        const DavAccount account = DavStore::account(id);
+        providerId = account.oauthProvider;
+        hint = account.username;
+    } else {
+        const Account account = m_accountManager->account(id);
+        providerId = account.oauthProvider;
+        hint = account.email;
+    }
+    const OAuthProvider provider = OAuthProvider::forId(providerId);
+    if (!provider.isConfigured()) {
+        setError(i18n("Sign-in through %1 is not set up: the client ID is missing in fjordpost.conf.", provider.isValid() ? provider.name : providerId));
+        return;
+    }
+    // Für DAV-Konten ohne Mailbereich: openid/email für die Adresse genügt
+    QStringList scopes = dav ? provider.davScopes + QStringList{QStringLiteral("openid"), QStringLiteral("email")} : provider.mailScopes;
+    m_signInBusy = true;
+    Q_EMIT signInChanged();
+    m_tokens->client()->authorize(provider, scopes, hint, [this, key, id, dav, provider](const OAuthClient::Result &result) {
+        auto finish = [this](const QString &error) {
+            m_signInBusy = false;
+            if (error.isEmpty())
+                m_signInKey.clear();
+            Q_EMIT signInChanged();
+            setError(error);
+        };
+        if (!result.error.isEmpty() || result.refreshToken.isEmpty()) {
+            finish(result.error.isEmpty() ? i18n("%1 did not grant lasting access. Please try again.", provider.name) : result.error);
+            return;
+        }
+        m_tokens->store(key, provider.id, result, [this, id, dav, finish](bool ok) {
+            if (!ok) {
+                finish(i18n("The sign-in could not be saved in the wallet."));
+                return;
+            }
+            finish({});
+            if (dav)
+                Q_EMIT syncRequested();
+            else
+                m_mail->syncAccount(id);
+        });
+    });
 }
 
 void AppController::dismissError()

@@ -5,6 +5,7 @@
 #include <QBuffer>
 #include <QLoggingCategory>
 #include <QNetworkReply>
+#include <QPointer>
 #include <QXmlStreamReader>
 
 Q_LOGGING_CATEGORY(lcDav, "fjordpost.dav")
@@ -113,6 +114,12 @@ void DavClient::setBearerToken(const QString &token)
     m_authorization = "Bearer " + token.toUtf8();
 }
 
+void DavClient::setTokenSource(TokenSource source, std::function<void()> invalidate)
+{
+    m_tokenSource = std::move(source);
+    m_invalidateToken = std::move(invalidate);
+}
+
 void DavClient::propfind(const QUrl &url, int depth, const QByteArray &body, Callback callback)
 {
     send({"PROPFIND", url, body, "application/xml; charset=utf-8", {{"Depth", QByteArray::number(depth)}}, 0, std::move(callback)});
@@ -163,6 +170,26 @@ void DavClient::proppatch(const QUrl &url, const QByteArray &body, Callback call
 
 void DavClient::send(Request r)
 {
+    if (m_tokenSource && !r.authorized) {
+        QPointer<DavClient> self(this);
+        m_tokenSource([self, r = std::move(r)](const QString &token, const QString &error) mutable {
+            if (!self)
+                return;
+            if (token.isEmpty()) {
+                DavReply reply;
+                reply.status = 401;
+                reply.url = r.url;
+                reply.error = error;
+                r.callback(reply);
+                return;
+            }
+            self->m_authorization = "Bearer " + token.toUtf8();
+            r.authorized = true;
+            self->send(std::move(r));
+        });
+        return;
+    }
+
     QNetworkRequest request(r.url);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     request.setTransferTimeout(timeoutMs);
@@ -197,6 +224,16 @@ void DavClient::send(Request r)
                 return;
             }
             qCWarning(lcDav) << "Umleitung abgelehnt:" << r.url << "→" << target;
+        }
+
+        if (status == 401 && m_tokenSource && !r.retried) {
+            // Token kann vor Ablauf widerrufen worden sein: einmal frisch versuchen.
+            if (m_invalidateToken)
+                m_invalidateToken();
+            r.retried = true;
+            r.authorized = false;
+            send(std::move(r));
+            return;
         }
 
         DavReply result;

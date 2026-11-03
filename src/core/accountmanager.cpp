@@ -33,6 +33,7 @@ Account accountFromQuery(const QSqlQuery &q)
     a.sortOrder = q.value(QStringLiteral("sort_order")).toInt();
     a.signature = q.value(QStringLiteral("signature")).toString();
     a.leaveOnServer = q.value(QStringLiteral("leave_on_server")).toBool();
+    a.oauthProvider = q.value(QStringLiteral("oauth_provider")).toString();
     return a;
 }
 
@@ -62,6 +63,7 @@ void bindAccount(QSqlQuery &q, const Account &a)
     q.bindValue(QStringLiteral(":sort_order"), a.sortOrder);
     q.bindValue(QStringLiteral(":signature"), nonNull(a.signature));
     q.bindValue(QStringLiteral(":leave_on_server"), a.leaveOnServer);
+    q.bindValue(QStringLiteral(":oauth_provider"), nonNull(a.oauthProvider));
 }
 
 } // namespace
@@ -99,16 +101,16 @@ Account AccountManager::save(Account account)
     if (isNew) {
         q.prepare(QStringLiteral(
             "INSERT INTO accounts (name, display_name, email, color, type, incoming_host, incoming_port, "
-            "incoming_security, outgoing_host, outgoing_port, outgoing_security, username, auth_method, enabled, sort_order, signature, leave_on_server) "
+            "incoming_security, outgoing_host, outgoing_port, outgoing_security, username, auth_method, enabled, sort_order, signature, leave_on_server, oauth_provider) "
             "VALUES (:name, :display_name, :email, :color, :type, :incoming_host, :incoming_port, "
-            ":incoming_security, :outgoing_host, :outgoing_port, :outgoing_security, :username, :auth_method, :enabled, :sort_order, :signature, :leave_on_server)"));
+            ":incoming_security, :outgoing_host, :outgoing_port, :outgoing_security, :username, :auth_method, :enabled, :sort_order, :signature, :leave_on_server, :oauth_provider)"));
     } else {
         q.prepare(QStringLiteral(
             "UPDATE accounts SET name=:name, display_name=:display_name, email=:email, color=:color, type=:type, "
             "incoming_host=:incoming_host, incoming_port=:incoming_port, incoming_security=:incoming_security, "
             "outgoing_host=:outgoing_host, outgoing_port=:outgoing_port, outgoing_security=:outgoing_security, "
             "username=:username, auth_method=:auth_method, enabled=:enabled, sort_order=:sort_order, signature=:signature, "
-            "leave_on_server=:leave_on_server WHERE id=:id"));
+            "leave_on_server=:leave_on_server, oauth_provider=:oauth_provider WHERE id=:id"));
         q.bindValue(QStringLiteral(":id"), account.id);
     }
     bindAccount(q, account);

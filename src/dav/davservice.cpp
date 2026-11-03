@@ -1,5 +1,6 @@
 #include "davservice.h"
 
+#include "auth/oauthtokens.h"
 #include "core/secretstore.h"
 #include "dav/davclient.h"
 #include "dav/davdiscovery.h"
@@ -8,6 +9,7 @@
 
 #include <KLocalizedString>
 
+#include <QPointer>
 #include <QUrl>
 
 namespace Fjordpost {
@@ -35,6 +37,12 @@ void DavService::start()
 
 void DavService::attachWithSecret(const DavAccount &account)
 {
+    if (!account.oauthProvider.isEmpty()) {
+        // Das Token holt der Client selbst vor jeder Anfrage.
+        attach(account, {});
+        m_accounts.value(account.id)->sync();
+        return;
+    }
     m_secrets->read(account.secretKey(), [this, account](bool ok, const QString &secret) {
         if (!ok) {
             Q_EMIT errorOccurred(i18n("The password for \"%1\" could not be read from the wallet.", account.name));
@@ -48,7 +56,15 @@ void DavService::attachWithSecret(const DavAccount &account)
 void DavService::attach(const DavAccount &account, const QString &password)
 {
     auto *client = new DavClient(this);
-    client->setBasicAuth(account.username, password);
+    if (account.oauthProvider.isEmpty()) {
+        client->setBasicAuth(account.username, password);
+    } else if (m_tokens) {
+        const QString key = account.secretKey();
+        client->setTokenSource(m_tokens->fetcher(key, account.oauthProvider), [tokens = QPointer<OAuthTokens>(m_tokens), key] {
+            if (tokens)
+                tokens->invalidate(key);
+        });
+    }
     auto *sync = new DavSync(account, client, this);
     client->setParent(sync);
     m_accounts.insert(account.id, sync);
@@ -93,20 +109,77 @@ void DavService::addAccount(const QString &address, const QString &username, con
         account.calendarHome = result.calendarHome;
         account.addressbookHome = result.addressbookHome;
         account.autoSchedule = result.autoSchedule;
-        account.id = DavStore::saveAccount(account);
-        if (account.id == 0) {
-            done(i18n("The account could not be saved."));
+        saveAndAttach(account, password, done);
+    });
+}
+
+void DavService::saveAndAttach(DavAccount account, const QString &secret, std::function<void(const QString &error)> done)
+{
+    account.id = DavStore::saveAccount(account);
+    if (account.id == 0) {
+        done(i18n("The account could not be saved."));
+        return;
+    }
+    m_secrets->write(account.secretKey(), secret, [this, account, secret, done](bool ok) {
+        if (!ok) {
+            DavStore::removeAccount(account.id);
+            done(i18n("The password could not be saved in the wallet."));
             return;
         }
-        m_secrets->write(account.secretKey(), password, [this, account, password, done](bool ok) {
-            if (!ok) {
-                DavStore::removeAccount(account.id);
-                done(i18n("The password could not be saved in the wallet."));
+        attach(account, secret);
+        m_accounts.value(account.id)->sync();
+        done({});
+    });
+}
+
+void DavService::addOAuthAccount(const OAuthProvider &provider, const QString &email, const OAuthClient::Result &tokens, qint64 mailAccountId,
+                                 std::function<void(const QString &error)> done)
+{
+    if (!provider.hasDav()) {
+        done(i18n("%1 offers no calendars or contacts through CalDAV/CardDAV.", provider.name));
+        return;
+    }
+    // Kalender und Adressbücher liegen bei Google auf verschiedenen Hosts: zweimal suchen.
+    auto *client = new DavClient(this);
+    client->setBearerToken(tokens.accessToken);
+    auto *calendars = new DavDiscovery(client, client);
+    calendars->start(provider.caldavUrl.toString(), [=, this](const DavDiscovery::Result &calendarResult) {
+        auto *books = new DavDiscovery(client, client);
+        books->start(provider.carddavUrl.toString(), [=, this](const DavDiscovery::Result &bookResult) {
+            client->deleteLater();
+            if (calendarResult.calendarHome.isEmpty() && bookResult.addressbookHome.isEmpty()) {
+                done(calendarResult.error.isEmpty() ? bookResult.error : calendarResult.error);
                 return;
             }
-            attach(account, password);
-            m_accounts.value(account.id)->sync();
-            done({});
+            DavAccount account;
+            account.url = (calendarResult.calendarHome.isEmpty() ? bookResult.baseUrl : calendarResult.baseUrl).toString();
+            account.name = i18nc("@label account name, %1 provider, %2 address", "%1 (%2)", provider.name, email);
+            account.username = email;
+            account.mailAccountId = mailAccountId;
+            account.calendarHome = calendarResult.calendarHome;
+            account.addressbookHome = bookResult.addressbookHome;
+            account.autoSchedule = calendarResult.autoSchedule;
+            account.oauthProvider = provider.id;
+            account.id = DavStore::saveAccount(account);
+            if (account.id == 0) {
+                done(i18n("The account could not be saved."));
+                return;
+            }
+            if (!m_tokens) {
+                done(i18n("Sign-in through the browser is not available."));
+                return;
+            }
+            m_tokens->store(account.secretKey(), provider.id, tokens, [this, account, done](bool ok) {
+                if (!ok) {
+                    DavStore::removeAccount(account.id);
+                    done(i18n("The sign-in could not be saved in the wallet."));
+                    return;
+                }
+                attach(account, {});
+                m_accounts.value(account.id)->sync();
+                Q_EMIT dataChanged();
+                done({});
+            });
         });
     });
 }
@@ -116,8 +189,11 @@ void DavService::removeAccount(qint64 id)
     if (DavSync *s = m_accounts.take(id))
         s->deleteLater();
     const DavAccount account = DavStore::account(id);
-    if (account.id > 0)
+    if (account.id > 0) {
         m_secrets->remove(account.secretKey());
+        if (m_tokens)
+            m_tokens->forget(account.secretKey());
+    }
     DavStore::removeAccount(id);
     Q_EMIT dataChanged();
 }

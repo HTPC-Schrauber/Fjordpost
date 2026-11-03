@@ -309,12 +309,23 @@ Rectangle {
                 id: errorRow
                 anchors.fill: parent
                 anchors.margins: 8
-                QQC2.Label {
+                ColumnLayout {
                     Layout.fillWidth: true
-                    text: App.lastError
-                    wrapMode: Text.Wrap
-                    font.pointSize: Theme.fontXxs
-                    color: Theme.textPrimary
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        text: App.lastError
+                        wrapMode: Text.Wrap
+                        font.pointSize: Theme.fontXxs
+                        color: Theme.textPrimary
+                    }
+                    // Abgelaufene Anmeldung bei Google/Microsoft
+                    QQC2.Button {
+                        visible: App.signInNeeded.length > 0
+                        enabled: !App.signInBusy
+                        text: App.signInBusy ? i18n("Waiting for the browser…") : i18n("Sign in to %1 again", App.signInNeeded)
+                        icon.name: "globe"
+                        onClicked: App.signInAgain()
+                    }
                 }
                 IconButton {
                     iconName: "window-close"

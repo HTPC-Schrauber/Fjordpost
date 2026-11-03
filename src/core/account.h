@@ -4,6 +4,8 @@
 #include <QMetaType>
 #include <QString>
 
+#include <functional>
+
 namespace Fjordpost {
 
 enum class AccountType { Imap, Pop3 };
@@ -34,11 +36,16 @@ struct Account {
     int sortOrder = 0;
     QString signature;     // Klartext ohne Trenner "-- "
     bool leaveOnServer = true; // POP3: abgerufene Nachrichten nicht vom Server löschen
+    QString oauthProvider; // bei AuthMethod::OAuth2: "google" oder "microsoft"
 
     bool isValid() const { return id > 0; }
     QString secretKey() const { return secretKeyFor(id); }
     static QString secretKeyFor(qint64 accountId) { return QStringLiteral("account-%1").arg(accountId); }
 };
+
+// Holt vor einer Anmeldung ein frisches OAuth-Zugriffstoken (siehe OAuthTokens).
+using TokenCallback = std::function<void(const QString &token, const QString &error)>;
+using TokenSource = std::function<void(TokenCallback callback)>;
 
 QString accountTypeToString(AccountType t);
 QString securityToString(Security s);

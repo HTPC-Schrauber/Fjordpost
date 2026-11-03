@@ -256,6 +256,11 @@ const char *const migrations[] = {
     );
     CREATE INDEX idx_dav_item_emails ON dav_item_emails(email);
     )SQL",
+    // v8: Anmeldung über OAuth2; Anbieter ("google", "microsoft"), leer = Passwort
+    R"SQL(
+    ALTER TABLE accounts ADD COLUMN oauth_provider TEXT NOT NULL DEFAULT '';
+    ALTER TABLE dav_accounts ADD COLUMN oauth_provider TEXT NOT NULL DEFAULT '';
+    )SQL",
 };
 
 constexpr int migrationCount = int(sizeof(migrations) / sizeof(migrations[0]));

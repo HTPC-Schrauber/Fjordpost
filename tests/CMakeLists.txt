@@ -11,6 +11,7 @@ ecm_add_tests(
     m2featurestest.cpp
     pimtest.cpp
     davtest.cpp
+    oauthtest.cpp
     LINK_LIBRARIES fjordpostcore Qt6::Test
 )
 

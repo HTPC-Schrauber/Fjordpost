@@ -1,5 +1,6 @@
 #pragma once
 
+#include "auth/oauthclient.h"
 #include "mail/autoconfig/autoconfig.h"
 
 #include <QObject>
@@ -7,13 +8,16 @@
 namespace Fjordpost {
 
 class AccountManager;
+class DavService;
+class OAuthTokens;
 class SecretStore;
 class SmtpSender;
 
 // Ablaufsteuerung für den Konto-Assistenten in QML:
 // 1. discover(email) ermittelt Servereinstellungen,
 // 2. der Nutzer prüft/ändert sie,
-// 3. testAndSave(password) prüft die Anmeldung und legt das Konto an.
+// 3. testAndSave(password) prüft die Anmeldung und legt das Konto an,
+//    bei Google/Microsoft alternativ signInWithBrowser().
 class AccountSetup : public QObject
 {
     Q_OBJECT
@@ -36,6 +40,11 @@ class AccountSetup : public QObject
     Q_PROPERTY(int outgoingSecurity MEMBER m_outgoingSecurity NOTIFY settingsChanged)
     Q_PROPERTY(QString source READ source NOTIFY settingsChanged)
     Q_PROPERTY(bool needsOAuth READ needsOAuth NOTIFY settingsChanged)
+    // Erkannter OAuth-Anbieter (leer = keiner); configured: Client-ID ist eingetragen
+    Q_PROPERTY(QString oauthProvider READ oauthProvider NOTIFY settingsChanged)
+    Q_PROPERTY(QString oauthProviderName READ oauthProviderName NOTIFY settingsChanged)
+    Q_PROPERTY(bool oauthConfigured READ oauthConfigured NOTIFY settingsChanged)
+    Q_PROPERTY(bool oauthHasDav READ oauthHasDav NOTIFY settingsChanged)
 
 public:
     AccountSetup(AccountManager *accounts, SecretStore *secrets, QObject *parent = nullptr);
@@ -45,10 +54,19 @@ public:
     QString errorText() const { return m_error; }
     QString source() const { return m_settings.source; }
     bool needsOAuth() const { return m_needsOAuth; }
+    QString oauthProvider() const { return m_oauthProvider; }
+    QString oauthProviderName() const;
+    bool oauthConfigured() const;
+    bool oauthHasDav() const;
+
+    void setTokens(OAuthTokens *tokens) { m_tokens = tokens; }
+    void setDav(DavService *dav) { m_dav = dav; }
 
     Q_INVOKABLE void reset();
     Q_INVOKABLE void discover(const QString &email);
     Q_INVOKABLE void testAndSave(const QString &password);
+    // Anmeldung im Browser; withDav: auch Kalender und Kontakte des Anbieters einrichten
+    Q_INVOKABLE void signInWithBrowser(bool withDav);
     Q_INVOKABLE void cancel();
     // Ergebnis der Suche übernehmen (sonst über discover(); öffentlich für Tests)
     void applyDiscovered(const DiscoveredSettings &settings);
@@ -60,6 +78,8 @@ Q_SIGNALS:
     void settingsChanged();
     void discovered();
     void saved(qint64 accountId);
+    // Konto angelegt, aber etwas Zusätzliches (Kalender/Kontakte) ging schief
+    void warning(const QString &message);
 
 private:
     void setBusy(bool busy);
@@ -75,9 +95,12 @@ private:
     void incomingTested(bool ok, const QString &error, const QString &password);
     void testOutgoing(const QString &password);
     void save(const QString &password);
+    void finishSaved(qint64 accountId);
 
     AccountManager *m_accounts;
     SecretStore *m_secrets;
+    OAuthTokens *m_tokens = nullptr;
+    DavService *m_dav = nullptr;
     AutoConfig *m_autoconfig;
     SmtpSender *m_smtp;
     DiscoveredSettings m_settings;
@@ -106,6 +129,10 @@ private:
     QString m_status;
     QString m_error;
     bool m_needsOAuth = false;
+    QString m_oauthProvider;
+    // Laufende Einrichtung über OAuth (accessToken leer = Passwort)
+    OAuthClient::Result m_oauth;
+    bool m_oauthWithDav = false;
 
     QString m_name;
     QString m_displayName;

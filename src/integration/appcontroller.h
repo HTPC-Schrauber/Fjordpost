@@ -15,6 +15,7 @@ class LabelModel;
 class MailService;
 class MailTransfer;
 class MessageListModel;
+class OAuthTokens;
 struct OutgoingMessage;
 
 // Zentrale Fassade für die QML-Oberfläche: hält die Auswahl
@@ -49,9 +50,17 @@ class AppController : public QObject
     // Laufender Import oder Export
     Q_PROPERTY(bool transferBusy READ transferBusy NOTIFY transferChanged)
     Q_PROPERTY(QString transferStatus READ transferStatus NOTIFY transferChanged)
+    // Konto, dessen OAuth-Anmeldung abgelaufen ist (Name; leer = keins)
+    Q_PROPERTY(QString signInNeeded READ signInNeeded NOTIFY signInChanged)
+    Q_PROPERTY(bool signInBusy READ signInBusy NOTIFY signInChanged)
 
 public:
     AppController(AccountManager *accounts, MailService *mail, AccountSetup *setup, QObject *parent = nullptr);
+    void setTokens(OAuthTokens *tokens);
+    QString signInNeeded() const;
+    bool signInBusy() const { return m_signInBusy; }
+    // Erneute Anmeldung im Browser für das Konto aus signInNeeded
+    Q_INVOKABLE void signInAgain();
 
     QObject *accountsObject() const;
     QObject *foldersObject() const;
@@ -180,6 +189,7 @@ Q_SIGNALS:
     void undoSendSecondsChanged();
     void conversationViewChanged();
     void transferChanged();
+    void signInChanged();
     // Manueller Abgleich: auch Kalender und Kontakte
     void syncRequested();
     // draft enthält die Composer-Daten, um die Nachricht nach dem Rückgängigmachen
@@ -205,6 +215,9 @@ private:
     AccountManager *m_accountManager;
     MailService *m_mail;
     AccountSetup *m_setup;
+    OAuthTokens *m_tokens = nullptr;
+    QString m_signInKey;
+    bool m_signInBusy = false;
     AccountModel *m_accountModel;
     FolderModel *m_folderModel;
     MessageListModel *m_messageModel;

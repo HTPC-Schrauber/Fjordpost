@@ -26,7 +26,7 @@ QString likeEscape(const QString &text)
     return s;
 }
 
-const QString accountColumns = QStringLiteral("id, name, url, username, mail_account_id, calendar_home, addressbook_home, auto_schedule");
+const QString accountColumns = QStringLiteral("id, name, url, username, mail_account_id, calendar_home, addressbook_home, auto_schedule, oauth_provider");
 
 DavAccount accountFrom(const QSqlQuery &q)
 {
@@ -39,6 +39,7 @@ DavAccount accountFrom(const QSqlQuery &q)
     a.calendarHome = q.value(5).toString();
     a.addressbookHome = q.value(6).toString();
     a.autoSchedule = q.value(7).toBool();
+    a.oauthProvider = q.value(8).toString();
     return a;
 }
 
@@ -124,10 +125,10 @@ qint64 saveAccount(const DavAccount &a)
     QSqlQuery q(Database::connection());
     if (a.id > 0) {
         q.prepare(QStringLiteral("UPDATE dav_accounts SET name = ?, url = ?, username = ?, mail_account_id = ?, calendar_home = ?, "
-                                 "addressbook_home = ?, auto_schedule = ? WHERE id = ?"));
+                                 "addressbook_home = ?, auto_schedule = ?, oauth_provider = ? WHERE id = ?"));
     } else {
-        q.prepare(QStringLiteral("INSERT INTO dav_accounts (name, url, username, mail_account_id, calendar_home, addressbook_home, auto_schedule) "
-                                 "VALUES (?, ?, ?, ?, ?, ?, ?)"));
+        q.prepare(QStringLiteral("INSERT INTO dav_accounts (name, url, username, mail_account_id, calendar_home, addressbook_home, auto_schedule, oauth_provider) "
+                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"));
     }
     q.addBindValue(nonNull(a.name));
     q.addBindValue(nonNull(a.url));
@@ -136,6 +137,7 @@ qint64 saveAccount(const DavAccount &a)
     q.addBindValue(nonNull(a.calendarHome));
     q.addBindValue(nonNull(a.addressbookHome));
     q.addBindValue(a.autoSchedule);
+    q.addBindValue(nonNull(a.oauthProvider));
     if (a.id > 0)
         q.addBindValue(a.id);
     if (!q.exec()) {

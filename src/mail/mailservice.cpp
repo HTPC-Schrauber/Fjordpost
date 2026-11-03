@@ -1,5 +1,6 @@
 #include "mailservice.h"
 
+#include "auth/oauthtokens.h"
 #include "core/accountmanager.h"
 #include "core/secretstore.h"
 #include "mail/filterengine.h"
@@ -106,6 +107,24 @@ void MailService::addImapAccount(const Account &account)
     });
     connect(imap, &ImapAccount::bodyFetched, this, &MailService::bodyFetched);
 
+    if (account.authMethod == AuthMethod::OAuth2) {
+        if (!m_tokens) {
+            Q_EMIT errorOccurred(id, i18n("Sign-in through the browser is not available."));
+            return;
+        }
+        const QString key = account.secretKey();
+        // Ein abgelehntes Token nicht weiterverwenden; das nächste wird frisch geholt.
+        connect(imap, &ImapAccount::errorOccurred, this, [this, key] {
+            m_tokens->invalidate(key);
+        });
+        imap->setTokenSource(m_tokens->fetcher(key, account.oauthProvider));
+        // Platzhalter: Das eigentliche Token kommt vor jeder Anmeldung aus der Token-Quelle.
+        imap->setCredentials(account, QStringLiteral("oauth2"));
+        imap->sync();
+        imap->startIdle();
+        return;
+    }
+
     m_secrets->read(account.secretKey(), [this, id](bool ok, const QString &secret) {
         ImapAccount *imap = m_imap.value(id);
         if (!imap)
@@ -166,6 +185,8 @@ void MailService::removeAccount(qint64 accountId)
     FilterStore::removeForAccount(accountId);
     m_syncing.remove(accountId);
     m_secrets->remove(Account::secretKeyFor(accountId));
+    if (m_tokens)
+        m_tokens->forget(Account::secretKeyFor(accountId));
     Q_EMIT syncingChanged();
 }
 
@@ -423,8 +444,9 @@ void MailService::processOutbox()
             continue;
 
         const Account account = m_accounts->account(accountId);
+        const bool oauth = account.authMethod == AuthMethod::OAuth2;
         const QString secret = m_secretCache.value(accountId);
-        if (!account.isValid() || secret.isEmpty())
+        if (!account.isValid() || (oauth ? !m_tokens || !m_imap.contains(accountId) : secret.isEmpty()))
             continue;
 
         const QString blob = q.value(2).toString();
@@ -436,7 +458,7 @@ void MailService::processOutbox()
         const QString referenceKind = q.value(7).toString();
 
         m_sendingOutbox.insert(id);
-        m_smtp->send(account, secret, sender, recipients, raw, [=, this](bool ok, const QString &error) {
+        auto finished = [=, this](bool ok, const QString &error) {
             m_sendingOutbox.remove(id);
             if (!ok) {
                 QSqlQuery u(Database::connection());
@@ -453,6 +475,20 @@ void MailService::processOutbox()
             afterSent(id, accountId, raw, reference, referenceKind);
             BlobStore::remove(blob);
             Q_EMIT messageSent(accountId, subject);
+        };
+        if (!oauth) {
+            m_smtp->send(account, secret, sender, recipients, raw, finished);
+            continue;
+        }
+        m_tokens->accessToken(account.secretKey(), account.oauthProvider, [=, this](const QString &token, const QString &error) {
+            if (token.isEmpty())
+                finished(false, error);
+            else
+                m_smtp->send(account, token, sender, recipients, raw, [=, this](bool ok, const QString &error) {
+                    if (!ok)
+                        m_tokens->invalidate(account.secretKey());
+                    finished(ok, error);
+                });
         });
     }
 }

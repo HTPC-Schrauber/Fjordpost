@@ -7,6 +7,8 @@
 #include <QStringList>
 #include <QUrl>
 
+#include "core/account.h"
+
 #include <functional>
 
 namespace Fjordpost {
@@ -48,8 +50,10 @@ public:
     explicit DavClient(QObject *parent = nullptr);
 
     void setBasicAuth(const QString &username, const QString &password);
-    // Für OAuth2 (M4): ersetzt Basic-Anmeldung
     void setBearerToken(const QString &token);
+    // OAuth2: Token vor jeder Anfrage holen (meist aus dem Speicher); nach 401 einmal
+    // mit frischem Token wiederholen, vorher invalidate aufrufen.
+    void setTokenSource(TokenSource source, std::function<void()> invalidate);
 
     void propfind(const QUrl &url, int depth, const QByteArray &body, Callback callback);
     void report(const QUrl &url, int depth, const QByteArray &body, Callback callback);
@@ -73,11 +77,15 @@ private:
         QHash<QByteArray, QByteArray> headers;
         int redirects = 0;
         Callback callback;
+        bool authorized = false; // Token für diese Anfrage schon geholt
+        bool retried = false;
     };
     void send(Request request);
 
     QNetworkAccessManager *m_network;
     QByteArray m_authorization;
+    TokenSource m_tokenSource;
+    std::function<void()> m_invalidateToken;
 };
 
 } // namespace Fjordpost

@@ -1,5 +1,7 @@
 #include "imapaccount.h"
 
+#include <QPointer>
+
 #include "imapconnection.h"
 #include "mail/mime/kmimecompat.h"
 #include "mail/mime/messageparser.h"
@@ -24,6 +26,7 @@
 #include <KLocalizedString>
 
 #include <QLoggingCategory>
+#include <QPointer>
 #include <QSqlDatabase>
 #include <memory>
 
@@ -83,6 +86,13 @@ void ImapAccount::setCredentials(const Account &account, const QString &secret)
     m_secret = secret;
     m_sync->setCredentials(account, secret);
     m_interactive->setCredentials(account, secret);
+}
+
+void ImapAccount::setTokenSource(TokenSource source)
+{
+    m_tokenSource = source;
+    m_sync->setTokenSource(source);
+    m_interactive->setTokenSource(std::move(source));
 }
 
 void ImapAccount::setSyncing(bool syncing)
@@ -701,6 +711,23 @@ void ImapAccount::startIdle()
 {
     if (m_shuttingDown || m_secret.isEmpty())
         return;
+    if (!m_tokenSource) {
+        startIdleWith(m_secret);
+        return;
+    }
+    QPointer<ImapAccount> self(this);
+    m_tokenSource([self](const QString &token, const QString &) {
+        if (!self || self->m_shuttingDown)
+            return;
+        if (token.isEmpty())
+            self->m_idleRetry.start(120 * 1000);
+        else
+            self->startIdleWith(token);
+    });
+}
+
+void ImapAccount::startIdleWith(const QString &secret)
+{
     const qint64 inboxId = MailStore::folderIdForRole(m_account.id, QString::fromLatin1(FolderRole::Inbox));
     if (inboxId == 0) {
         // Ordnerliste noch nicht bekannt; nach dem ersten Abgleich erneut versuchen.
@@ -719,7 +746,7 @@ void ImapAccount::startIdle()
             m_idleRetry.start(seconds * 1000);
     };
 
-    auto *login = ImapConnection::createLoginJob(m_idleSession, m_account, m_secret);
+    auto *login = ImapConnection::createLoginJob(m_idleSession, m_account, secret);
     connect(login, &KJob::result, this, [this, login, inboxId, retryLater](KJob *) {
         if (login->error()) {
             retryLater(120);

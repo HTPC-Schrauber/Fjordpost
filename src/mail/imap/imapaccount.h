@@ -26,6 +26,8 @@ public:
 
     qint64 accountId() const { return m_account.id; }
     void setCredentials(const Account &account, const QString &secret);
+    // OAuth: Token vor jeder Anmeldung frisch holen (alle drei Verbindungen)
+    void setTokenSource(TokenSource source);
 
     // Kompletter Abgleich: Offline-Operationen, Ordnerliste, Nachrichten.
     void sync();
@@ -67,6 +69,7 @@ private:
     using Done = std::function<void()>;
 
     void setSyncing(bool syncing);
+    void startIdleWith(const QString &secret);
     void listFolders(KIMAP::Session *session, Done done);
     void syncFolders(KIMAP::Session *session, QList<FolderState> folders, Done done);
     void syncOneFolder(KIMAP::Session *session, const FolderState &folder, Done done);
@@ -84,6 +87,7 @@ private:
     QPointer<KIMAP::Session> m_idleSession;
     QPointer<KIMAP::IdleJob> m_idleJob;
     QString m_secret;
+    TokenSource m_tokenSource;
     QTimer m_idleRetry;
     bool m_syncing = false;
     bool m_syncQueued = false;

@@ -115,6 +115,25 @@ void ImapConnection::login(std::function<void(bool)> then)
         then(false);
         return;
     }
+    if (!m_tokenSource) {
+        loginWith(m_secret, std::move(then));
+        return;
+    }
+    QPointer<ImapConnection> self(this);
+    m_tokenSource([self, then = std::move(then)](const QString &token, const QString &error) mutable {
+        if (!self)
+            return;
+        if (token.isEmpty()) {
+            Q_EMIT self->loginFailed(error);
+            then(false);
+            return;
+        }
+        self->loginWith(token, std::move(then));
+    });
+}
+
+void ImapConnection::loginWith(const QString &secret, std::function<void(bool)> then)
+{
 
     m_session = new KIMAP::Session(m_account.incomingHost, quint16(m_account.incomingPort), this);
     m_session->setObjectName(m_name);
@@ -126,7 +145,7 @@ void ImapConnection::login(std::function<void(bool)> then)
         Q_EMIT connectionLost();
     });
 
-    auto *job = createLoginJob(m_session, m_account, m_secret);
+    auto *job = createLoginJob(m_session, m_account, secret);
     connect(job, &KJob::result, this, [this, job, then = std::move(then)](KJob *) mutable {
         if (job->error()) {
             qCWarning(lcImap) << m_name << "Anmeldung fehlgeschlagen:" << job->errorString();

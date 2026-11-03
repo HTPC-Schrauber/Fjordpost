@@ -49,7 +49,7 @@ C++20 · Qt 6 · KDE Frameworks 6 · Kirigami · SQLite
 | M1 | IMAP + SMTP, Kontoeinrichtung, Lesen/Schreiben | ✅ |
 | M2 | Signaturen, Senden rückgängig, Konversationen, Labels, Snooze, Filterregeln, POP3, Import/Export | fertig ✅ |
 | M3 | CardDAV / CalDAV: Kalender, Kontakte, Aufgaben, Einladungen | Code fertig, Test gegen Radicale grün, manueller Oberflächentest offen |
-| M4 | Google (OAuth2 für Gmail, Kontakte, Kalender) | geplant |
+| M4 | OAuth2: Google (Gmail, Kontakte, Kalender) und Microsoft (Mail) | Google getestet, Microsoft offen |
 | M5 | OpenPGP + S/MIME | geplant |
 | M6 | Übersetzungen, Feinschliff, Pakete (Flatpak, PKGBUILD) | geplant |
 

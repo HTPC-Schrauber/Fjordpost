@@ -1,5 +1,8 @@
 # Kernbibliothek: alles außer main(), damit Tests sie linken können.
 add_library(fjordpostcore STATIC
+    auth/oauthclient.cpp
+    auth/oauthprovider.cpp
+    auth/oauthtokens.cpp
     core/account.cpp
     core/accountmanager.cpp
     core/secretstore.cpp

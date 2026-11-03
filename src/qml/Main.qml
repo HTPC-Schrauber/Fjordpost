@@ -192,6 +192,9 @@ Kirigami.AbstractApplicationWindow {
             messageList.step(1);
         } else if (name === "setup") {
             accountSetup.open();
+        } else if (name === "setup-oauth") {
+            accountSetup.devEmail = "max.mustermann@gmail.com";
+            accountSetup.open();
         } else if (name === "settings") {
             settingsDialog.open();
         } else if (name === "light") {

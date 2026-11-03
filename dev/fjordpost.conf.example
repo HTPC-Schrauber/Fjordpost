@@ -1,0 +1,48 @@
+# Beispiel für die Anmeldung über OAuth2 (Google, Microsoft).
+#
+# Die Gruppe [OAuth] gehört in ~/.config/fjordblau.de/fjordpost.conf (die Datei legt
+# Fjordpost beim ersten Start an; andere Gruppen darin nicht anfassen).
+# Eigene Client-IDs und Secrets nie ins Repository einchecken.
+#
+# Ohne Eintrag bietet die Kontoeinrichtung für Gmail und Outlook nur die Anmeldung
+# mit (App-)Passwort an. Outlook.com/Microsoft 365 nehmen Passwörter für IMAP/SMTP
+# nicht mehr an, Google nur noch App-Passwörter.
+#
+# --- Google (Gmail, Kalender, Kontakte) ------------------------------------------
+# console.cloud.google.com:
+#  1. Projekt anlegen (z. B. "Fjordpost").
+#  2. "APIs & Dienste" → "Bibliothek": "Gmail API", "CalDAV API" und
+#     "Google Contacts CardDAV API" aktivieren.
+#  3. "Google Auth Platform" (früher "OAuth-Zustimmungsbildschirm"): Zielgruppe "Extern",
+#     App-Name, Support- und Entwickleradresse eintragen.
+#     Unter "Datenzugriff" die Bereiche hinzufügen:
+#       https://mail.google.com/
+#       https://www.googleapis.com/auth/calendar
+#       https://www.googleapis.com/auth/carddav
+#     Unter "Zielgruppe" die eigene Google-Adresse als Testnutzer eintragen.
+#  4. "Clients" → "Client erstellen", Typ "Desktop-App". Client-ID und Clientschlüssel
+#     unten eintragen. Eine Weiterleitungsadresse ist nicht nötig (localhost ist erlaubt).
+#  Im Status "Test" laufen Anmeldungen nach 7 Tagen ab. Mit "App veröffentlichen" (ohne
+#  Überprüfung durch Google) entfällt das; Nutzer sehen dann den Hinweis "Google hat diese
+#  App nicht überprüft" (Erweitert → Weiter zu Fjordpost), höchstens 100 Nutzer.
+#
+# --- Microsoft (Outlook.com, Hotmail, Microsoft 365; nur Mail) -------------------
+# Die Registrierung braucht ein Entra-Verzeichnis (Mandant). Ein privates Microsoft-Konto allein darf
+# keine Apps mehr anlegen; ein Verzeichnis entsteht z. B. mit einem kostenlosen Azure-Konto (Kreditkarte nur
+# zur Prüfung). Zum Testen braucht es außerdem ein Postfach bei Microsoft (@outlook.com, Microsoft 365).
+# entra.microsoft.com (oder portal.azure.com) → "App-Registrierungen" → "Neue Registrierung":
+#  1. Name "Fjordpost", unterstützte Kontotypen: "Konten in einem beliebigen
+#     Organisationsverzeichnis und persönliche Microsoft-Konten".
+#  2. Umleitungs-URI: Plattform "Öffentlicher Client/nativ (mobil und Desktop)",
+#     Adresse http://localhost
+#  3. "Authentifizierung": "Öffentliche Clientflows zulassen" auf "Ja".
+#  4. "API-Berechtigungen" → "Berechtigung hinzufügen" → "APIs, die meine Organisation
+#     verwendet" → "Office 365 Exchange Online" → "Delegierte Berechtigungen":
+#     IMAP.AccessAsUser.All und SMTP.Send (sowie unter Microsoft Graph: offline_access,
+#     openid, email).
+#  5. Die "Anwendungs-ID (Client)" unten eintragen. Ein Secret braucht Microsoft nicht.
+
+[OAuth]
+google\clientId=
+google\clientSecret=
+microsoft\clientId=

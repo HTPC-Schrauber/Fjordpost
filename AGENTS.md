@@ -37,7 +37,7 @@ build/bin/fjordpost --demo --offline --data-dir /tmp/fjordpost-demo
 | `--offline` | keine Serververbindungen |
 | `--data-dir <dir>` | eigenes Datenverzeichnis (echte Daten nie für Tests nutzen) |
 | `--screenshot <png>` | Fenster nach 3 s als Bild speichern und beenden (startet auch neben laufender Instanz) |
-| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light`, `undo-send`, `open-thread`, `expand-thread`, `thread-history`, `label-menu`, `label-dialog`, `label-filter`, `snooze-menu`, `snooze-date`, `snoozed`, `filter-rules`, `filter-rule`, `compose-completion`, `calendar`, `calendar-week`, `calendar-event`, `collection-new`, `collection-edit`, `collection-delete`, `contacts`, `contact-edit`, `contact-transfer`, `tasks`, `task-edit`, `dav-account`, `invitation` |
+| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light`, `undo-send`, `open-thread`, `expand-thread`, `thread-history`, `label-menu`, `label-dialog`, `label-filter`, `snooze-menu`, `snooze-date`, `snoozed`, `filter-rules`, `filter-rule`, `compose-completion`, `setup-oauth`, `calendar`, `calendar-week`, `calendar-event`, `collection-new`, `collection-edit`, `collection-delete`, `contacts`, `contact-edit`, `contact-transfer`, `tasks`, `task-edit`, `dav-account`, `invitation` |
 
 Oberflächenänderungen immer per `--screenshot` prüfen und die Konsolenausgabe auf
 QML-Warnungen kontrollieren. Achtung: `--dev-action light` speichert den hellen Modus in
@@ -48,6 +48,8 @@ QML-Warnungen kontrollieren. Achtung: `--dev-action light` speichert den hellen 
 ```
 src/
   core/         Account, AccountManager (DB), SecretStore (QtKeychain → KWallet)
+  auth/         OAuthProvider (Google/Microsoft, Client-ID aus fjordpost.conf), OAuthClient (Browser-Anmeldung
+                über localhost + PKCE, Token-Erneuerung), OAuthTokens (Zugriffstokens im Speicher, Refresh-Token im SecretStore)
   storage/      Database (Migrationen, FTS5), BlobStore (.eml-Dateien), MailStore (Sync-DB-Zugriffe),
                 LabelStore (Labels, auf dem Server als IMAP-Schlüsselwörter), FilterStore (Filterregeln),
                 DavStore (Konten, Sammlungen, Ressourcen für DAV), messageflags.h (Flag-Bitmaske, Ordnerrollen), demodata
@@ -103,6 +105,12 @@ Grundprinzipien:
 - **Daten von außen in QML** (Termintitel, Kontaktnamen, Einladungen) nur mit `textFormat: Text.PlainText`:
   `Label` rendert sonst HTML, ein Titel könnte externe Bilder nachladen.
 - **Passwörter/Tokens** nur über `SecretStore`, nie in DB oder Konfiguration.
+- **OAuth2 (Google, Microsoft):** eigener Ablauf statt Qt NetworkAuth (API ändert sich zwischen 6.8 und 6.9).
+  Client-ID/-Secret stehen in `fjordpost.conf`, Gruppe `[OAuth]` (Vorlage mit Anleitung: `dev/fjordpost.conf.example`),
+  nie im Repo. Im SecretStore liegt nur das Refresh-Token; `accounts.oauth_provider` bzw. `dav_accounts.oauth_provider`
+  nennt den Anbieter. IMAP, SMTP und DAV holen sich vor jeder Anmeldung bzw. Anfrage über eine `TokenSource` ein
+  frisches Zugriffstoken (`OAuthTokens::fetcher`), nach Ablehnung wird es verworfen. Microsoft erneuert das
+  Refresh-Token bei jeder Verwendung, es wird dann neu gespeichert. Microsoft hat kein CalDAV/CardDAV, dort nur Mail.
 
 ## Code-Konventionen
 
@@ -160,6 +168,11 @@ Grundprinzipien:
 - mbox-Import: ohne Statuskopfzeile gilt eine Nachricht als gelesen; `Mbox::entry` schreibt deshalb immer `Status`.
 - `KStatusNotifierItem` hält die Event-Schleife am Leben: Die App endet nicht mit dem letzten Fenster, Beenden geht nur
   ausdrücklich (`Qt.quit()`, `Prefs.general.closeToTray`). `grabWindow()` auf ein verborgenes Fenster stürzt ab.
+- **SecretStore-Schlüssel** (`account-N`, `dav-N`) hängen nicht am Datenverzeichnis: Ein Konto in einem frischen
+  `--data-dir` bekommt wieder `account-1` und überschreibt in KWallet das Passwort des ersten echten Kontos.
+  Mit `--data-dir` nur offline oder mit `FakeSecretStore` testen.
+- Die Rückkehr der Browser-Anmeldung geht an `http://localhost:<port>`; der Browser löst `localhost` mal nach IPv4,
+  mal nach IPv6 auf, `OAuthClient` lauscht deshalb auf beiden.
 - `Settings`-Kategorie nie `General` nennen: `QSettings` behandelt die Gruppe gesondert (`[General]` sind Schlüssel ohne Gruppe).
 
 ## Design
@@ -184,7 +197,7 @@ Die Oberfläche folgt dem Entwurf `mopmail_ui.html` des Projektinhabers:
 | M1 | IMAP + SMTP, Kontoeinrichtung, Lesen/Schreiben, Design-Umbau | fertig, Servertest grün; manueller Oberflächentest offen |
 | M2 | POP3, Threading, Snooze, Labels, Filterregeln, Signaturen, Senden rückgängig, Import/Export | fertig, Servertest grün (auch POP3, Filter, Import/Export); manueller Oberflächentest offen |
 | M3 | CardDAV/CalDAV, Kalender, Kontakte, Aufgaben, Einladungen | Code fertig, Test gegen Radicale grün; manueller Oberflächentest offen |
-| M4 | Google OAuth2 (Gmail, Kontakte, Kalender) | geplant |
+| M4 | OAuth2 für Google (Gmail, Kontakte, Kalender) und Microsoft (Mail) | Google mit echtem Konto getestet; Microsoft ungetestet (braucht ein Entra-Verzeichnis, s. `dev/fjordpost.conf.example`) |
 | M5 | OpenPGP + S/MIME (QGpgME) | geplant |
 | M6 | Übersetzung, Einstellungen, Feinschliff, Flatpak/PKGBUILD | geplant |
 

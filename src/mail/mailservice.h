@@ -14,6 +14,7 @@ namespace Fjordpost {
 
 class AccountManager;
 class ImapAccount;
+class OAuthTokens;
 class Pop3Account;
 class SecretStore;
 class SmtpSender;
@@ -26,6 +27,9 @@ class MailService : public QObject
 public:
     MailService(AccountManager *accounts, SecretStore *secrets, QObject *parent = nullptr);
     ~MailService() override;
+
+    // Ohne Tokens (Tests) können OAuth-Konten keine Verbindung aufbauen.
+    void setTokens(OAuthTokens *tokens) { m_tokens = tokens; }
 
     // Lädt die Zugangsdaten aller Konten und startet Abgleich + IDLE.
     void start();
@@ -87,6 +91,7 @@ private:
 
     AccountManager *m_accounts;
     SecretStore *m_secrets;
+    OAuthTokens *m_tokens = nullptr;
     SmtpSender *m_smtp;
     QHash<qint64, ImapAccount *> m_imap;
     QHash<qint64, Pop3Account *> m_pop3;

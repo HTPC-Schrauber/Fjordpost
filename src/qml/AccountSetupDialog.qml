@@ -5,12 +5,18 @@ import org.kde.kirigami as Kirigami
 import de.fjordblau.fjordpost.core
 import "components"
 
-// Konto-Assistent: Schritt 1 Adresse/Passwort, Schritt 2 Servereinstellungen prüfen.
+// Konto-Assistent: Schritt 1 Adresse/Passwort, Schritt 2 Servereinstellungen prüfen
+// oder (Google, Microsoft) Anmeldung im Browser.
 ThemedDialog {
     id: dialog
 
     readonly property var setup: App.accountSetup
     property int step: 0
+    // Bei erkanntem OAuth-Anbieter trotzdem Passwort und Servereinstellungen zeigen
+    property bool usePassword: false
+    // Entwicklung (--dev-action setup-oauth): diese Adresse gleich suchen
+    property string devEmail
+    readonly property bool browserSignIn: step === 1 && setup.oauthProvider.length > 0 && setup.oauthConfigured && !usePassword
 
     title: i18n("Add Email Account")
     preferredWidth: Kirigami.Units.gridUnit * 30
@@ -20,8 +26,11 @@ ThemedDialog {
     onOpened: {
         setup.reset();
         step = 0;
+        usePassword = false;
         passwordField.text = "";
         emailField.forceActiveFocus();
+        if (devEmail.length > 0)
+            setup.discover(devEmail);
     }
     onClosed: setup.cancel()
 
@@ -48,9 +57,16 @@ ThemedDialog {
 
         Kirigami.InlineMessage {
             Layout.fillWidth: true
-            visible: dialog.step === 1 && dialog.setup.needsOAuth
+            visible: dialog.step === 1 && dialog.setup.needsOAuth && dialog.setup.oauthProvider.length === 0
             type: Kirigami.MessageType.Warning
-            text: i18n("This provider may require signing in through the browser (OAuth). Support for this follows in a later version; an app password may work instead.")
+            text: i18n("This provider may require signing in through the browser (OAuth), which Fjordpost does not support for it yet. An app password may work instead.")
+        }
+
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: dialog.step === 1 && dialog.setup.oauthProvider.length > 0 && !dialog.setup.oauthConfigured
+            type: Kirigami.MessageType.Information
+            text: i18n("Signing in to %1 through the browser needs an OAuth client ID in fjordpost.conf (see dev/fjordpost.conf.example). Until then, use an app password.", dialog.setup.oauthProviderName)
         }
 
         // Schritt 1: Zugangsdaten
@@ -76,15 +92,43 @@ ThemedDialog {
             }
             Kirigami.PasswordField {
                 id: passwordField
+                visible: !dialog.browserSignIn
                 Kirigami.FormData.label: i18n("Password:")
                 onAccepted: dialog.step === 0 ? dialog.setup.discover(emailField.text) : dialog.setup.testAndSave(text)
+            }
+        }
+
+        // Schritt 2 bei Google/Microsoft: Anmeldung im Browser
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: dialog.browserSignIn
+            enabled: !dialog.setup.busy
+            spacing: Kirigami.Units.smallSpacing
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                // ohne feste Breite würde der Text den Dialog auf eine Zeile verbreitern
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 24
+                wrapMode: Text.Wrap
+                text: i18n("Sign in with your %1 account in your web browser. Fjordpost never sees your password; you can revoke access at any time in your %1 account settings.", dialog.setup.oauthProviderName)
+            }
+            QQC2.CheckBox {
+                id: davBox
+                visible: dialog.setup.oauthHasDav
+                checked: true
+                text: i18n("Also set up calendars and contacts")
+            }
+            QQC2.Button {
+                flat: true
+                text: i18n("Use a password instead")
+                onClicked: dialog.usePassword = true
             }
         }
 
         // Schritt 2: Servereinstellungen
         Kirigami.FormLayout {
             Layout.fillWidth: true
-            visible: dialog.step === 1
+            visible: dialog.step === 1 && !dialog.browserSignIn
             enabled: !dialog.setup.busy
 
             Kirigami.Separator {
@@ -195,17 +239,33 @@ ThemedDialog {
 
     customFooterActions: [
         Kirigami.Action {
-            text: i18n("Back")
-            icon.name: "go-previous"
-            visible: dialog.step === 1
-            enabled: !dialog.setup.busy
-            onTriggered: dialog.step = 0
+            text: i18n("Cancel")
+            icon.name: "dialog-cancel"
+            visible: dialog.setup.busy
+            onTriggered: dialog.setup.cancel()
         },
         Kirigami.Action {
-            text: dialog.step === 0 ? i18n("Continue") : i18n("Sign In")
-            icon.name: dialog.step === 0 ? "go-next" : "dialog-ok"
-            enabled: !dialog.setup.busy && emailField.text.length > 0 && passwordField.text.length > 0
-            onTriggered: dialog.step === 0 ? dialog.setup.discover(emailField.text) : dialog.setup.testAndSave(passwordField.text)
+            text: i18n("Back")
+            icon.name: "go-previous"
+            visible: dialog.step === 1 && !dialog.setup.busy
+            onTriggered: {
+                dialog.step = 0;
+                dialog.usePassword = false;
+            }
+        },
+        Kirigami.Action {
+            text: dialog.step === 0 ? i18n("Continue") : dialog.browserSignIn ? i18n("Sign In with %1", dialog.setup.oauthProviderName) : i18n("Sign In")
+            icon.name: dialog.step === 0 ? "go-next" : dialog.browserSignIn ? "globe" : "dialog-ok"
+            // Das Passwort braucht es erst, wenn feststeht, dass nicht im Browser angemeldet wird.
+            enabled: !dialog.setup.busy && emailField.text.length > 0 && (dialog.step === 0 || dialog.browserSignIn || passwordField.text.length > 0)
+            onTriggered: {
+                if (dialog.step === 0)
+                    dialog.setup.discover(emailField.text);
+                else if (dialog.browserSignIn)
+                    dialog.setup.signInWithBrowser(davBox.checked);
+                else
+                    dialog.setup.testAndSave(passwordField.text);
+            }
         }
     ]
 
