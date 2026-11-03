@@ -37,7 +37,7 @@ build/bin/fjordpost --demo --offline --data-dir /tmp/fjordpost-demo
 | `--offline` | keine Serververbindungen |
 | `--data-dir <dir>` | eigenes Datenverzeichnis (echte Daten nie für Tests nutzen) |
 | `--screenshot <png>` | Fenster nach 3 s als Bild speichern und beenden (startet auch neben laufender Instanz) |
-| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light`, `undo-send`, `open-thread`, `expand-thread`, `thread-history`, `label-menu`, `label-dialog`, `label-filter`, `snooze-menu`, `snooze-date`, `snoozed`, `filter-rules`, `filter-rule`, `compose-completion`, `setup-oauth`, `calendar`, `calendar-week`, `calendar-event`, `collection-new`, `collection-edit`, `collection-delete`, `contacts`, `contact-edit`, `contact-transfer`, `tasks`, `task-edit`, `dav-account`, `invitation` |
+| `--dev-action <a>` | vor dem Screenshot: `open-first`, `reply`, `compose`, `compose-window`, `setup`, `settings`, `light`, `undo-send`, `open-thread`, `expand-thread`, `thread-history`, `label-menu`, `label-dialog`, `label-filter`, `snooze-menu`, `snooze-date`, `snoozed`, `filter-rules`, `filter-rule`, `compose-completion`, `setup-oauth`, `calendar`, `calendar-week`, `calendar-event`, `event-delete-series`, `collection-new`, `collection-edit`, `collection-delete`, `contacts`, `contact-edit`, `contact-transfer`, `tasks`, `task-edit`, `dav-account`, `invitation` |
 
 Oberflächenänderungen immer per `--screenshot` prüfen und die Konsolenausgabe auf
 QML-Warnungen kontrollieren. Achtung: `--dev-action light` speichert den hellen Modus in
@@ -95,7 +95,7 @@ Grundprinzipien:
   `dav_items` ist eine Ressource; `raw` ist die Wahrheit, alle anderen Spalten leitet `pim/pimdata` daraus ab.
   Beim Bearbeiten wird `raw` geändert, nicht neu erzeugt (unbekannte Eigenschaften bleiben). Offline zuerst über
   `dav_items.pending`: `DavSync` sendet erst und vergleicht dann per CTag/ETag; bei `412` gewinnt der Server.
-  Serien liegen als eine Ressource vor und werden nur als Ganzes bearbeitet. Einladungen gehen per Mail
+  Serien liegen als eine Ressource vor und werden nur als Ganzes bearbeitet; beim Löschen auch nur ein Vorkommnis (`EXDATE`) oder der Rest der Serie (`UNTIL`), Gäste bekommen dann eine Absage für die Instanz bzw. die gekürzte Serie. Einladungen gehen per Mail
   (iTIP), außer der Server meldet `calendar-auto-schedule`. Sammlungen anlegen, bearbeiten und löschen geht direkt
   zum Server und wird nicht vorgemerkt: Er darf ablehnen, und das muss sofort sichtbar sein. Kalender tragen nur `VEVENT`,
   Aufgabenlisten nur `VTODO`. Verschieben ist Neuanlegen plus Löschen (Original zuerst, gleiche UID),
@@ -173,6 +173,8 @@ Grundprinzipien:
   Mit `--data-dir` nur offline oder mit `FakeSecretStore` testen.
 - Die Rückkehr der Browser-Anmeldung geht an `http://localhost:<port>`; der Browser löst `localhost` mal nach IPv4,
   mal nach IPv6 auf, `OAuthClient` lauscht deshalb auf beiden.
+- Google teilt eine Serie bei „dieser und alle folgenden“ in neue Serien mit eigener UID auf; über CalDAV sind die Teile
+  nicht verknüpft. Manche Kalender-Apps legen Termine auch als lauter Einzeltermine an. Beides nicht zusammenführen.
 - `Settings`-Kategorie nie `General` nennen: `QSettings` behandelt die Gruppe gesondert (`[General]` sind Schlüssel ohne Gruppe).
 
 ## Design

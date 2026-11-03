@@ -48,6 +48,14 @@ QString applyEventFields(const QString &raw, const QVariantMap &fields, const QS
 QString applyTodoFields(const QString &raw, const QVariantMap &fields, const QString &uid);
 QString setTodoCompleted(const QString &raw, bool completed);
 
+// Einzelne Vorkommnisse einer Serie. shown ist der angezeigte Beginn; bei verschobenen
+// Einzelterminen ist das nicht ihre RECURRENCE-ID, die liefert recurrenceIdAt.
+QDateTime recurrenceIdAt(const QString &raw, const QDateTime &shown);
+// Nimmt das Vorkommnis aus der Serie (EXDATE) samt geänderter Einzelfassung.
+QString excludeOccurrence(const QString &raw, const QDateTime &shown);
+// Beendet die Serie vor diesem Vorkommnis (UNTIL); spätere Einzelfassungen entfallen.
+QString endSeriesBefore(const QString &raw, const QDateTime &shown);
+
 // Kontakt: name, organization, jobTitle, emails, phones, address, birthdayMs, note
 QVariantMap contactFields(const QString &raw);
 QString applyContactFields(const QString &raw, const QVariantMap &fields, const QString &uid);

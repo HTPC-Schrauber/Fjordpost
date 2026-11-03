@@ -162,6 +162,13 @@ Kirigami.AbstractApplicationWindow {
         } else if (name === "calendar-event") {
             root.section = "calendar";
             eventDialog.openNew(new Date(), false);
+        } else if (name === "event-delete-series") {
+            // zweites Vorkommnis des wöchentlichen Demo-Termins "Lauftreff"
+            root.section = "calendar";
+            const now = new Date();
+            const runs = App.pim.occurrences(now.getTime(), now.getTime() + 21 * 86400000).filter(o => o.recurring && o.title === "Lauftreff");
+            eventDialog.openEdit(runs[1].itemId, runs[1].startMs);
+            eventDialog.confirmRemove();
         } else if (name === "collection-new") {
             root.section = "calendar";
             calendarPage.collections.create();
@@ -403,7 +410,7 @@ Kirigami.AbstractApplicationWindow {
                         onCloseRequested: Theme.settings.contextDrawer = false
                     onNewTaskRequested: (summary, description) => taskDialog.openNew(summary, description)
                     onNewContactRequested: (name, email) => contactDialog.openNew(name, email)
-                    onEditEventRequested: id => eventDialog.openEdit(id)
+                    onEditEventRequested: (id, startMs) => eventDialog.openEdit(id, startMs)
                     onEditTaskRequested: id => taskDialog.openEdit(id)
                     onNotify: message => root.notify(message)
                     }
@@ -412,7 +419,7 @@ Kirigami.AbstractApplicationWindow {
                 CalendarPage {
                     id: calendarPage
                     onNewEventRequested: (start, allDay) => eventDialog.openNew(start, allDay)
-                    onEditEventRequested: id => eventDialog.openEdit(id)
+                    onEditEventRequested: (id, startMs) => eventDialog.openEdit(id, startMs)
                     onAddAccountRequested: davAccountDialog.open()
                 }
 

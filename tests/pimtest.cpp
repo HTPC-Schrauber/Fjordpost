@@ -58,6 +58,47 @@ private Q_SLOTS:
         QCOMPARE(list.at(2).start.toUTC(), utc(2026, 1, 26, 10));
     }
 
+    void deleteFromSeries()
+    {
+        const QString raw = QString::fromLatin1(recurring);
+        const auto starts = [](const QString &changed) {
+            DavItem item;
+            item.raw = changed;
+            QList<QDateTime> result;
+            if (!Pim::deriveCalendarFields(item))
+                return result;
+            const auto list = Pim::occurrences(item, utc(2026, 1, 1), utc(2026, 2, 28));
+            for (const auto &o : list)
+                result << o.start.toUTC();
+            return result;
+        };
+        // Der verschobene Termin wird mit seinem neuen Beginn angezeigt, gemeint ist seine RECURRENCE-ID.
+        const QDateTime moved = utc(2026, 1, 20, 15).toLocalTime();
+        QCOMPARE(Pim::recurrenceIdAt(raw, moved).toUTC(), utc(2026, 1, 19, 10));
+        QCOMPARE(Pim::recurrenceIdAt(raw, utc(2026, 1, 26, 10)).toUTC(), utc(2026, 1, 26, 10));
+
+        const QString withoutMoved = Pim::excludeOccurrence(raw, moved);
+        QCOMPARE(starts(withoutMoved), (QList<QDateTime>{utc(2026, 1, 5, 10), utc(2026, 1, 26, 10)}));
+        QVERIFY(!withoutMoved.contains(QLatin1String("RECURRENCE-ID")));
+        QVERIFY(withoutMoved.contains(QRegularExpression(QStringLiteral("X-CUSTOM(;[^:\\r\\n]*)?:bleibt"))));
+
+        const QString withoutLast = Pim::excludeOccurrence(raw, utc(2026, 1, 26, 10).toLocalTime());
+        QCOMPARE(starts(withoutLast), (QList<QDateTime>{utc(2026, 1, 5, 10), utc(2026, 1, 20, 15)}));
+
+        const QString ended = Pim::endSeriesBefore(raw, moved);
+        QCOMPARE(starts(ended), (QList<QDateTime>{utc(2026, 1, 5, 10)}));
+        QVERIFY(!ended.contains(QLatin1String("RECURRENCE-ID")));
+
+        // Kein Serientermin: nichts zu tun
+        QVERIFY(Pim::excludeOccurrence(QString::fromLatin1(invitation), utc(2026, 3, 10, 9)).isEmpty());
+
+        // Absage nur für das eine Vorkommnis
+        const QString cancel = QString::fromUtf8(Itip::buildCancel(raw, utc(2026, 1, 26, 10)));
+        QVERIFY(cancel.contains(QLatin1String("METHOD:CANCEL")));
+        QVERIFY(cancel.contains(QLatin1String("RECURRENCE-ID")));
+        QVERIFY(!cancel.contains(QLatin1String("RRULE")));
+    }
+
     void editKeepsUnknownProperties()
     {
         const QString raw = Pim::applyEventFields(QString::fromLatin1(recurring),

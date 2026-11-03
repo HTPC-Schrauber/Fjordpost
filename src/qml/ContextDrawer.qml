@@ -32,7 +32,7 @@ Rectangle {
     signal closeRequested()
     signal newTaskRequested(string summary, string description)
     signal newContactRequested(string name, string email)
-    signal editEventRequested(var itemId)
+    signal editEventRequested(var itemId, var startMs)
     signal editTaskRequested(var itemId)
     signal notify(string message)
 
@@ -193,7 +193,7 @@ Rectangle {
                         Layout.fillWidth: true
                         implicitHeight: 38
                         hoverEnabled: true
-                        onClicked: drawer.editEventRequested(modelData.itemId)
+                        onClicked: drawer.editEventRequested(modelData.itemId, modelData.startMs)
                         background: Rectangle {
                             radius: Theme.radiusSm
                             color: parent.hovered ? Theme.card : "transparent"

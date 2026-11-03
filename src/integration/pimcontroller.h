@@ -56,7 +56,8 @@ public:
     Q_INVOKABLE QVariantList occurrences(double fromMs, double toMs) const;
     Q_INVOKABLE QVariantMap event(qint64 itemId) const;
     Q_INVOKABLE QString saveEvent(const QVariantMap &fields);
-    Q_INVOKABLE QString deleteEvent(qint64 itemId);
+    // scope bei Serien: "all", "this" oder "following" (ab dem Vorkommnis bei occurrenceMs)
+    Q_INVOKABLE QString deleteEvent(qint64 itemId, const QString &scope = QStringLiteral("all"), double occurrenceMs = 0);
 
     // Aufgaben
     Q_INVOKABLE QVariantList tasks(qint64 collectionId, bool includeCompleted) const;

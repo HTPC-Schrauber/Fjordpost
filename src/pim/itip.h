@@ -35,7 +35,8 @@ QString toCalendarObject(const QByteArray &ics, const QString &ownEmail, const Q
 QByteArray buildReply(const QByteArray &ics, const QString &ownEmail, const QString &status);
 // METHOD:REQUEST bzw. CANCEL aus der gespeicherten Ressource (für alle Teilnehmer)
 QByteArray buildRequest(const QString &raw);
-QByteArray buildCancel(const QString &raw);
+// recurrenceId gültig: nur dieses Vorkommnis absagen
+QByteArray buildCancel(const QString &raw, const QDateTime &recurrenceId = {});
 // Trägt die Antwort eines Teilnehmers in die eigene Ressource ein; leer, wenn nichts passt.
 QString applyReply(const QString &raw, const QString &attendeeEmail, const QString &status);
 // Eigene Teilnahme in einer Ressource ("ACCEPTED", ...), leer wenn nicht eingeladen

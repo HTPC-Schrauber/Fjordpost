@@ -358,23 +358,46 @@ QString PimController::removeItem(qint64 itemId)
     return {};
 }
 
-QString PimController::deleteEvent(qint64 itemId)
+QString PimController::deleteEvent(qint64 itemId, const QString &scope, double occurrenceMs)
 {
-    const DavItem item = DavStore::item(itemId);
+    DavItem item = DavStore::item(itemId);
     const DavCollection collection = DavStore::collection(item.collectionId);
     const QVariantMap fields = Pim::eventFields(item.raw);
     const QStringList attendees = fields.value(QStringLiteral("attendees")).toStringList();
     const Account mail = m_accounts->account(DavStore::account(collection.accountId).mailAccountId);
     const bool ours = mail.isValid() && addressOnly(fields.value(QStringLiteral("organizer")).toString()).compare(mail.email, Qt::CaseInsensitive) == 0;
-
-    QByteArray cancel;
-    if (ours && !attendees.isEmpty())
-        cancel = Itip::buildCancel(item.raw);
+    const bool notify = ours && !attendees.isEmpty();
     const QString title = item.title;
-    const QString error = removeItem(itemId);
-    if (error.isEmpty() && !cancel.isEmpty())
+
+    const QDateTime shown = QDateTime::fromMSecsSinceEpoch(qint64(occurrenceMs), QTimeZone::systemTimeZone());
+    const bool series = fields.value(QStringLiteral("repeat")).toString() != QLatin1String("none") && occurrenceMs > 0;
+    // Ab dem ersten Vorkommnis ist "dieses und alle folgenden" die ganze Serie.
+    const bool fromStart = shown.toMSecsSinceEpoch() <= qint64(fields.value(QStringLiteral("startMs")).toDouble());
+    if (!series || scope == QLatin1String("all") || (scope == QLatin1String("following") && fromStart)) {
+        const QByteArray cancel = notify ? Itip::buildCancel(item.raw) : QByteArray();
+        const QString error = removeItem(itemId);
+        if (error.isEmpty() && !cancel.isEmpty())
+            return sendSchedule(collection, cancel, QStringLiteral("CANCEL"), i18n("Cancelled: %1", title), attendees);
+        return error;
+    }
+
+    if (const QString error = writableError(collection); !error.isEmpty())
+        return error;
+    const QByteArray cancel = notify && scope == QLatin1String("this") ? Itip::buildCancel(item.raw, Pim::recurrenceIdAt(item.raw, shown)) : QByteArray();
+    item.raw = scope == QLatin1String("this") ? Pim::excludeOccurrence(item.raw, shown) : Pim::endSeriesBefore(item.raw, shown);
+    if (item.raw.isEmpty() || !Pim::deriveCalendarFields(item))
+        return i18n("The entry could not be saved.");
+    item.pending = item.pending == DavItem::Create ? DavItem::Create : DavItem::Modify;
+    if (!DavStore::saveItem(item))
+        return i18n("The entry could not be saved.");
+    changed(collection.id);
+
+    if (!notify)
+        return {};
+    // Einzelner Termin: Absage nur dafür. Gekürzte Serie: geänderte Einladung (RFC 5546, 3.2.2).
+    if (scope == QLatin1String("this"))
         return sendSchedule(collection, cancel, QStringLiteral("CANCEL"), i18n("Cancelled: %1", title), attendees);
-    return error;
+    return sendSchedule(collection, Itip::buildRequest(item.raw), QStringLiteral("REQUEST"), title, attendees);
 }
 
 QVariantList PimController::tasks(qint64 collectionId, bool includeCompleted) const

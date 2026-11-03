@@ -18,7 +18,8 @@ Rectangle {
     property alias collections: calendarCollections
 
     signal newEventRequested(date start, bool allDay)
-    signal editEventRequested(var itemId)
+    // startMs: angeklicktes Vorkommnis (bei Serien für "nur diesen Termin")
+    signal editEventRequested(var itemId, var startMs)
     signal addAccountRequested()
 
     color: Theme.reading
@@ -135,7 +136,7 @@ Rectangle {
                             width: ListView.view.width
                             implicitHeight: 42
                             hoverEnabled: true
-                            onClicked: page.editEventRequested(modelData.itemId)
+                            onClicked: page.editEventRequested(modelData.itemId, modelData.startMs)
                             background: Rectangle {
                                 radius: Theme.radiusSm
                                 color: parent.hovered ? Theme.card : "transparent"
@@ -345,7 +346,7 @@ Rectangle {
                                     width: parent.width
                                     height: 17
                                     hoverEnabled: true
-                                    onClicked: page.editEventRequested(modelData.itemId)
+                                    onClicked: page.editEventRequested(modelData.itemId, modelData.startMs)
                                     QQC2.ToolTip.text: modelData.timeText + " " + modelData.title
                                     QQC2.ToolTip.visible: hovered
                                     QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -417,7 +418,7 @@ Rectangle {
                                     Layout.leftMargin: 2
                                     Layout.rightMargin: 2
                                     implicitHeight: 18
-                                    onClicked: page.editEventRequested(modelData.itemId)
+                                    onClicked: page.editEventRequested(modelData.itemId, modelData.startMs)
                                     background: Rectangle {
                                         radius: 4
                                         color: Qt.alpha(modelData.color, 0.35)
@@ -531,7 +532,7 @@ Rectangle {
                                     width: (dayColumn.width - 4) / modelData.columns - 1
                                     height: Math.max(20, (endHours - startHours) * 44 - 1)
                                     hoverEnabled: true
-                                    onClicked: page.editEventRequested(modelData.event.itemId)
+                                    onClicked: page.editEventRequested(modelData.event.itemId, modelData.event.startMs)
                                     background: Rectangle {
                                         radius: 4
                                         color: Qt.alpha(parent.modelData.event.color, parent.hovered ? 0.5 : 0.28)

@@ -341,6 +341,99 @@ QVariantMap todoFields(const QString &raw)
             {QStringLiteral("reminderMinutes"), reminderMinutes(t)}};
 }
 
+QDateTime recurrenceIdAt(const QString &raw, const QDateTime &shown)
+{
+    const MemoryCalendar::Ptr calendar = parseCalendar(raw);
+    const auto events = calendar ? calendar->rawEvents() : Event::List();
+    for (const Event::Ptr &e : events) {
+        if (e->hasRecurrenceId() && e->dtStart() == shown)
+            return e->recurrenceId();
+    }
+    return shown;
+}
+
+namespace {
+
+// Serie und aufgelöste RECURRENCE-ID; master ist leer, wenn raw keine Serie ist.
+struct SeriesEdit {
+    MemoryCalendar::Ptr calendar;
+    Event::Ptr master;
+    QDateTime recurrenceId;
+};
+
+SeriesEdit seriesAt(const QString &raw, const QDateTime &shown)
+{
+    SeriesEdit edit;
+    edit.calendar = parseCalendar(raw);
+    if (!edit.calendar)
+        return edit;
+    const Event::Ptr master = masterOf(edit.calendar->rawEvents());
+    if (master && master->recurs() && !master->hasRecurrenceId())
+        edit.master = master;
+    edit.recurrenceId = recurrenceIdAt(raw, shown);
+    return edit;
+}
+
+// Geänderte Einzelfassungen entfernen, für die keep() false liefert
+template<typename Keep>
+void dropOverrides(const MemoryCalendar::Ptr &calendar, Keep keep)
+{
+    const auto events = calendar->rawEvents();
+    for (const Event::Ptr &e : events) {
+        if (e->hasRecurrenceId() && !keep(e->recurrenceId()))
+            calendar->deleteEvent(e);
+    }
+}
+
+} // namespace
+
+QString excludeOccurrence(const QString &raw, const QDateTime &shown)
+{
+    const SeriesEdit edit = seriesAt(raw, shown);
+    if (!edit.master)
+        return {};
+    const QDateTime rid = edit.recurrenceId;
+    dropOverrides(edit.calendar, [rid](const QDateTime &id) {
+        return id != rid;
+    });
+    Recurrence *r = edit.master->recurrence();
+    if (edit.master->allDay())
+        r->addExDate(rid.toLocalTime().date());
+    else // in der Zeitzone der Serie, sonst passt EXDATE nach einer Zeitumstellung nicht
+        r->addExDateTime(rid.toTimeZone(edit.master->dtStart().timeZone()));
+    edit.master->setRevision(edit.master->revision() + 1);
+    return serialize(edit.calendar);
+}
+
+QString endSeriesBefore(const QString &raw, const QDateTime &shown)
+{
+    const SeriesEdit edit = seriesAt(raw, shown);
+    if (!edit.master)
+        return {};
+    const QDateTime rid = edit.recurrenceId;
+    dropOverrides(edit.calendar, [rid](const QDateTime &id) {
+        return id < rid;
+    });
+    Recurrence *r = edit.master->recurrence();
+    if (edit.master->allDay())
+        r->setEndDate(rid.toLocalTime().date().addDays(-1));
+    else
+        r->setEndDateTime(rid.addSecs(-1));
+    // Zusätzliche Einzeldaten (RDATE) gelten unabhängig vom Ende der Regel
+    auto dateTimes = r->rDateTimes();
+    dateTimes.removeIf([rid](const QDateTime &dt) {
+        return dt >= rid;
+    });
+    r->setRDateTimes(dateTimes);
+    auto dates = r->rDates();
+    dates.removeIf([rid](const QDate &d) {
+        return d >= rid.toLocalTime().date();
+    });
+    r->setRDates(dates);
+    edit.master->setRevision(edit.master->revision() + 1);
+    return serialize(edit.calendar);
+}
+
 QString applyEventFields(const QString &raw, const QVariantMap &f, const QString &uid)
 {
     const MemoryCalendar::Ptr calendar = parseCalendar(raw);

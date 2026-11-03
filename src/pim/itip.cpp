@@ -149,11 +149,21 @@ QByteArray buildRequest(const QString &raw)
     return format.createScheduleMessage(e, iTIPRequest).toUtf8();
 }
 
-QByteArray buildCancel(const QString &raw)
+QByteArray buildCancel(const QString &raw, const QDateTime &recurrenceId)
 {
-    const Event::Ptr e = masterOf(parseCalendar(raw));
+    Event::Ptr e = masterOf(parseCalendar(raw));
     if (!e)
         return {};
+    if (recurrenceId.isValid() && e->recurs()) {
+        // Absage einer einzelnen Instanz: gleiche UID, ohne Regel, mit RECURRENCE-ID (RFC 5546, 3.2.5)
+        const qint64 length = e->dtStart().secsTo(e->dtEnd());
+        Event::Ptr instance(e->clone());
+        instance->clearRecurrence();
+        instance->setRecurrenceId(recurrenceId);
+        instance->setDtStart(recurrenceId);
+        instance->setDtEnd(recurrenceId.addSecs(length));
+        e = instance;
+    }
     e->setStatus(Incidence::StatusCanceled);
     e->setRevision(e->revision() + 1);
     ICalFormat format;

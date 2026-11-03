@@ -5,7 +5,8 @@ import org.kde.kirigami as Kirigami
 import de.fjordblau.fjordpost.core
 import "components"
 
-// Termin anlegen oder bearbeiten. Serien werden immer als Ganzes geändert.
+// Termin anlegen oder bearbeiten. Serien werden immer als Ganzes geändert;
+// beim Löschen lässt sich auch nur ein Vorkommnis oder der Rest der Serie wählen.
 ThemedDialog {
     id: dialog
 
@@ -13,6 +14,8 @@ ThemedDialog {
     property bool readOnly: false
     property var originalRepeat: "none"
     property var collectionId: 0
+    // Beginn des angeklickten Vorkommnisses (0 = unbekannt, dann nur ganze Serie)
+    property var occurrenceMs: 0
     // Erst beim Öffnen lesen: als Bindung bliebe die Liste leer, wenn das Konto später dazukommt,
     // und mit App.pim.revision würde ein Abgleich die Auswahl beim Bearbeiten zurücksetzen.
     property var calendars: []
@@ -34,10 +37,11 @@ ThemedDialog {
         open();
     }
 
-    function openEdit(id) {
+    function openEdit(id, startMs) {
         calendars = App.pim.collections("events").filter(c => !c.readOnly);
         const event = App.pim.event(id);
         itemId = id;
+        occurrenceMs = startMs ?? 0;
         readOnly = event.readOnly;
         collectionId = event.collectionId;
         load(event);
@@ -57,6 +61,20 @@ ThemedDialog {
         reminderBox.currentIndex = Math.max(0, reminderBox.indexOfValue(e.reminderMinutes));
         calendarBox.currentIndex = e.collectionId !== undefined ? Math.max(0, calendarBox.indexOfValue(e.collectionId)) : 0;
         errorMessage.visible = false;
+    }
+
+    function confirmRemove() {
+        if (originalRepeat !== "none" && occurrenceMs > 0)
+            deleteScope.open();
+        else
+            remove("all");
+    }
+
+    function remove(scope) {
+        const error = App.pim.deleteEvent(itemId, scope, occurrenceMs);
+        if (error.length > 0)
+            notify(error);
+        close();
     }
 
     function accept() {
@@ -107,12 +125,7 @@ ThemedDialog {
             text: i18n("Delete")
             icon.name: "edit-delete"
             visible: dialog.itemId > 0 && !dialog.readOnly
-            onTriggered: {
-                const error = App.pim.deleteEvent(dialog.itemId);
-                if (error.length > 0)
-                    dialog.notify(error);
-                dialog.close();
-            }
+            onTriggered: dialog.confirmRemove()
         },
         Kirigami.Action {
             text: i18n("Cancel")
@@ -120,6 +133,54 @@ ThemedDialog {
             onTriggered: dialog.close()
         }
     ]
+
+    // Nachfrage bei Serien
+    ThemedDialog {
+        id: deleteScope
+        parent: QQC2.Overlay.overlay
+        title: i18n("Delete Recurring Event")
+        preferredWidth: Kirigami.Units.gridUnit * 22
+        padding: Kirigami.Units.largeSpacing * 2
+        standardButtons: Kirigami.Dialog.NoButton
+        onOpened: thisOnly.checked = true
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Delete")
+                icon.name: "edit-delete"
+                onTriggered: {
+                    deleteScope.close();
+                    dialog.remove(thisOnly.checked ? "this" : following.checked ? "following" : "all");
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel"
+                onTriggered: deleteScope.close()
+            }
+        ]
+
+        ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing
+            QQC2.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                textFormat: Text.PlainText
+                text: i18n("\"%1\" repeats. Which events do you want to delete?", titleField.text)
+            }
+            QQC2.RadioButton {
+                id: thisOnly
+                text: i18n("Only this event (%1)", new Date(dialog.occurrenceMs).toLocaleDateString(Qt.locale(), Locale.LongFormat))
+            }
+            QQC2.RadioButton {
+                id: following
+                text: i18n("This and all following events")
+            }
+            QQC2.RadioButton {
+                text: i18n("All events in the series")
+            }
+        }
+    }
 
     TransferDialog {
         id: transfer

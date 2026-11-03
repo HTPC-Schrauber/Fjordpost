@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
     parser.addOption(demoOption);
     parser.addOption(dataDirOption);
     parser.addOption(offlineOption);
-    QCommandLineOption devActionOption(QStringLiteral("dev-action"), i18n("Trigger a UI action before the screenshot (open-first, compose, compose-window, reply, setup, settings, light, undo-send, open-thread, expand-thread, thread-history, label-menu, label-dialog, label-filter, snooze-menu, snooze-date, snoozed, filter-rules, filter-rule, compose-completion, setup-oauth, calendar, calendar-week, calendar-event, contacts, contact-edit, tasks, task-edit, dav-account, invitation)."), i18n("action"));
+    QCommandLineOption devActionOption(QStringLiteral("dev-action"), i18n("Trigger a UI action before the screenshot (open-first, compose, compose-window, reply, setup, settings, light, undo-send, open-thread, expand-thread, thread-history, label-menu, label-dialog, label-filter, snooze-menu, snooze-date, snoozed, filter-rules, filter-rule, compose-completion, setup-oauth, calendar, calendar-week, calendar-event, event-delete-series, contacts, contact-edit, tasks, task-edit, dav-account, invitation)."), i18n("action"));
     parser.addOption(screenshotOption);
     parser.addOption(devActionOption);
     about.setupCommandLine(&parser);
