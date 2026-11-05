@@ -22,6 +22,11 @@ public:
     static QString dataDir();
     static int schemaVersion();
     static int latestSchemaVersion();
+    // Kurze Zufallskennung dieses Datenverzeichnisses (z. B. für Namen im SecretStore)
+    static QString profileId();
+    // Lesbarer, je Datenverzeichnis eindeutiger Name für einen SecretStore-Eintrag,
+    // z. B. "Mail: max@example.de [3f9a·1]". Nicht übersetzt: Er muss stabil bleiben.
+    static QString secretEntryName(const QString &kind, const QString &label, qint64 id);
 
 private:
     static bool migrate(QSqlDatabase &db);

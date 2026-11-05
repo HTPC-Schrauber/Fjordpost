@@ -26,7 +26,7 @@ QString likeEscape(const QString &text)
     return s;
 }
 
-const QString accountColumns = QStringLiteral("id, name, url, username, mail_account_id, calendar_home, addressbook_home, auto_schedule, oauth_provider");
+const QString accountColumns = QStringLiteral("id, name, url, username, mail_account_id, calendar_home, addressbook_home, auto_schedule, oauth_provider, secret_key");
 
 DavAccount accountFrom(const QSqlQuery &q)
 {
@@ -40,6 +40,7 @@ DavAccount accountFrom(const QSqlQuery &q)
     a.addressbookHome = q.value(6).toString();
     a.autoSchedule = q.value(7).toBool();
     a.oauthProvider = q.value(8).toString();
+    a.secretName = q.value(9).toString();
     return a;
 }
 
@@ -120,7 +121,7 @@ DavAccount account(qint64 id)
     return q.next() ? accountFrom(q) : DavAccount();
 }
 
-qint64 saveAccount(const DavAccount &a)
+qint64 saveAccount(DavAccount &a)
 {
     QSqlQuery q(Database::connection());
     if (a.id > 0) {
@@ -144,7 +145,31 @@ qint64 saveAccount(const DavAccount &a)
         qCWarning(lcDavStore) << q.lastError().text();
         return 0;
     }
-    return a.id > 0 ? a.id : q.lastInsertId().toLongLong();
+    if (a.id > 0)
+        return a.id;
+    a.id = q.lastInsertId().toLongLong();
+    a.secretName = Database::secretEntryName(QStringLiteral("Kalender"), a.name, a.id);
+    if (!setSecretName(a.id, a.secretName))
+        return 0;
+    return a.id;
+}
+
+DavAccount accountWithSecret(const QString &secretName)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("SELECT %1 FROM dav_accounts WHERE secret_key = ? AND secret_key <> ''").arg(accountColumns));
+    q.addBindValue(secretName);
+    q.exec();
+    return q.next() ? accountFrom(q) : DavAccount();
+}
+
+bool setSecretName(qint64 accountId, const QString &name)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("UPDATE dav_accounts SET secret_key = ? WHERE id = ?"));
+    q.addBindValue(nonNull(name));
+    q.addBindValue(accountId);
+    return q.exec();
 }
 
 bool removeAccount(qint64 id)

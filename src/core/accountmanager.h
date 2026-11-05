@@ -25,11 +25,14 @@ public:
     // Ändert nur die Signatur, ohne accountChanged auszulösen
     // (das würde die Serververbindungen neu aufbauen).
     bool setSignature(qint64 id, const QString &signature);
+    // Nur für den Umzug alter SecretStore-Namen; ohne accountChanged
+    bool setSecretName(qint64 id, const QString &name);
 
 Q_SIGNALS:
     void accountAdded(const Fjordpost::Account &account);
     void accountChanged(const Fjordpost::Account &account);
-    void accountRemoved(qint64 id);
+    // secretKey: Eintrag im SecretStore, den der Empfänger noch entfernen muss
+    void accountRemoved(qint64 id, const QString &secretKey);
 
 private:
     QList<Account> m_accounts;

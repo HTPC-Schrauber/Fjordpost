@@ -1,5 +1,8 @@
 #include "core/accountmanager.h"
+#include "core/secretmigration.h"
+#include "core/secretstore.h"
 #include "storage/database.h"
+#include "storage/davstore.h"
 
 #include <QSignalSpy>
 #include <QSqlQuery>
@@ -7,6 +10,30 @@
 #include <QTest>
 
 using namespace Fjordpost;
+
+namespace {
+
+// SecretStore im Speicher; Rückrufe sofort
+class MemorySecrets : public SecretStore
+{
+public:
+    void read(const QString &key, ReadCallback callback) override { callback(entries.contains(key), entries.value(key)); }
+    void write(const QString &key, const QString &secret, WriteCallback callback) override
+    {
+        entries.insert(key, secret);
+        if (callback)
+            callback(true);
+    }
+    void remove(const QString &key, WriteCallback callback) override
+    {
+        entries.remove(key);
+        if (callback)
+            callback(true);
+    }
+    QHash<QString, QString> entries;
+};
+
+} // namespace
 
 class DatabaseTest : public QObject
 {
@@ -100,6 +127,91 @@ private Q_SLOTS:
         q.addBindValue(accountId);
         QVERIFY(q.exec());
         QVERIFY(!matches(QStringLiteral("inhalt")));
+    }
+
+    void secretNames()
+    {
+        const QString profile = Database::profileId();
+        QCOMPARE(profile.size(), 4);
+
+        AccountManager manager;
+        Account a;
+        a.name = QStringLiteral("Privat");
+        a.email = QStringLiteral("max@example.de");
+        a = manager.save(a);
+        QCOMPARE(a.secretKey(), QStringLiteral("Mail: max@example.de [%1\u00b7%2]").arg(profile).arg(a.id));
+        AccountManager reloaded;
+        reloaded.load();
+        QCOMPARE(reloaded.account(a.id).secretKey(), a.secretKey());
+
+        DavAccount dav;
+        dav.name = QStringLiteral("Google (max@gmail.com)");
+        dav.url = QStringLiteral("https://example.org/");
+        QVERIFY(DavStore::saveAccount(dav) > 0);
+        QCOMPARE(dav.secretKey(), QStringLiteral("Kalender: Google (max@gmail.com) [%1\u00b7%2]").arg(profile).arg(dav.id));
+        QCOMPARE(DavStore::account(dav.id).secretKey(), dav.secretKey());
+
+        // Beim Entfernen erfährt der Empfänger den Namen, um den Eintrag zu löschen
+        QSignalSpy removed(&reloaded, &AccountManager::accountRemoved);
+        QVERIFY(reloaded.remove(a.id));
+        QCOMPARE(removed.constFirst().at(1).toString(), a.secretKey());
+        DavStore::removeAccount(dav.id);
+    }
+
+    void legacySecretsMove()
+    {
+        // Stand vor v9: keine Namen in der DB, Einträge heißen account-N / dav-N
+        AccountManager manager;
+        Account a;
+        a.email = QStringLiteral("alt@example.de");
+        a = manager.save(a);
+        DavAccount dav;
+        dav.name = QStringLiteral("Nextcloud");
+        dav.url = QStringLiteral("https://cloud.example.org/");
+        DavStore::saveAccount(dav);
+        QSqlQuery q(Database::connection());
+        QVERIFY(q.exec(QStringLiteral("UPDATE accounts SET secret_key = ''")));
+        QVERIFY(q.exec(QStringLiteral("UPDATE dav_accounts SET secret_key = ''")));
+
+        MemorySecrets secrets;
+        secrets.entries.insert(QStringLiteral("account-%1").arg(a.id), QStringLiteral("passwort"));
+        secrets.entries.insert(QStringLiteral("dav-%1").arg(dav.id), QStringLiteral("dav-passwort"));
+
+        // Anderes Datenverzeichnis: alte Einträge nicht anfassen, nur Namen vergeben
+        {
+            AccountManager other;
+            other.load();
+            MemorySecrets copy;
+            copy.entries = secrets.entries;
+            bool done = false;
+            migrateSecretNames(&copy, &other, false, [&done] {
+                done = true;
+            });
+            QVERIFY(done);
+            QCOMPARE(copy.entries, secrets.entries);
+            QCOMPARE(other.account(a.id).secretKey(), a.secretKey());
+            QVERIFY(q.exec(QStringLiteral("UPDATE accounts SET secret_key = ''")));
+            QVERIFY(q.exec(QStringLiteral("UPDATE dav_accounts SET secret_key = ''")));
+        }
+
+        AccountManager loaded;
+        loaded.load();
+        QVERIFY(loaded.account(a.id).secretKey().isEmpty());
+        bool done = false;
+        migrateSecretNames(&secrets, &loaded, true, [&done] {
+            done = true;
+        });
+        QVERIFY(done);
+        QCOMPARE(loaded.account(a.id).secretKey(), a.secretKey());
+        QCOMPARE(secrets.entries.value(a.secretKey()), QStringLiteral("passwort"));
+        QCOMPARE(secrets.entries.value(DavStore::account(dav.id).secretKey()), QStringLiteral("dav-passwort"));
+        QVERIFY(!secrets.entries.contains(QStringLiteral("account-%1").arg(a.id)));
+        QVERIFY(!secrets.entries.contains(QStringLiteral("dav-%1").arg(dav.id)));
+        QCOMPARE(secrets.entries.size(), 2);
+
+        // Zweiter Lauf: nichts mehr zu tun
+        migrateSecretNames(&secrets, &loaded, true, [] {});
+        QCOMPARE(secrets.entries.size(), 2);
     }
 
 private:

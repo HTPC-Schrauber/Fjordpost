@@ -18,8 +18,9 @@ struct DavAccount {
     QString addressbookHome;
     bool autoSchedule = false; // Server verschickt Einladungen selbst (RFC 6638)
     QString oauthProvider;     // leer = Passwort, sonst Bearer-Token (z. B. "google")
+    QString secretName;        // Eintrag im SecretStore, vergibt saveAccount beim Anlegen
 
-    QString secretKey() const { return QStringLiteral("dav-%1").arg(id); }
+    QString secretKey() const { return secretName; }
 };
 
 struct DavCollection {
@@ -64,7 +65,11 @@ namespace DavStore {
 
 QList<DavAccount> accounts();
 DavAccount account(qint64 id);
-qint64 saveAccount(const DavAccount &account); // liefert die ID oder 0
+// Liefert die ID oder 0; bei neuen Konten werden id und secretName gesetzt.
+qint64 saveAccount(DavAccount &account);
+// Nur für den Umzug alter SecretStore-Namen
+bool setSecretName(qint64 accountId, const QString &name);
+DavAccount accountWithSecret(const QString &secretName);
 bool removeAccount(qint64 id);
 
 QList<DavCollection> collections(qint64 accountId = 0, const QString &kind = {});

@@ -1,5 +1,6 @@
 #include "auth/oauthtokens.h"
 #include "core/accountmanager.h"
+#include "core/secretmigration.h"
 #include "core/secretstore.h"
 #include "dav/davservice.h"
 #include "integration/accountsetup.h"
@@ -151,11 +152,14 @@ int main(int argc, char *argv[])
         return allowed;
     });
 
-    if (!parser.isSet(offlineOption) && !parser.isSet(screenshotOption))
-    {
-        mail.start();
-        dav.start();
-    }
+    // Erst die SecretStore-Namen umziehen, dann verbinden (liest die Zugangsdaten).
+    const bool connect = !parser.isSet(offlineOption) && !parser.isSet(screenshotOption);
+    migrateSecretNames(&secrets, &accounts, !parser.isSet(dataDirOption), [&mail, &dav, connect] {
+        if (connect) {
+            mail.start();
+            dav.start();
+        }
+    });
 
     if (parser.isSet(devActionOption)) {
         const QString action = parser.value(devActionOption);

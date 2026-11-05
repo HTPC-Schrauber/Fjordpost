@@ -251,10 +251,12 @@ QString AppController::signInNeeded() const
 {
     if (m_signInKey.isEmpty())
         return {};
-    const qint64 id = m_signInKey.section(QLatin1Char('-'), 1).toLongLong();
-    if (m_signInKey.startsWith(QLatin1String("dav-")))
-        return DavStore::account(id).name;
-    return m_accountManager->account(id).name;
+    const auto accounts = m_accountManager->accounts();
+    for (const Account &a : accounts) {
+        if (a.secretKey() == m_signInKey)
+            return a.name;
+    }
+    return DavStore::accountWithSecret(m_signInKey).name;
 }
 
 void AppController::signInAgain()
@@ -262,18 +264,22 @@ void AppController::signInAgain()
     if (!m_tokens || m_signInKey.isEmpty() || m_signInBusy)
         return;
     const QString key = m_signInKey;
-    const qint64 id = key.section(QLatin1Char('-'), 1).toLongLong();
-    const bool dav = key.startsWith(QLatin1String("dav-"));
+    qint64 id = 0;
     QString providerId;
     QString hint;
+    const auto accounts = m_accountManager->accounts();
+    for (const Account &a : accounts) {
+        if (a.secretKey() == key) {
+            id = a.id;
+            providerId = a.oauthProvider;
+            hint = a.email;
+        }
+    }
+    const bool dav = id == 0;
     if (dav) {
-        const DavAccount account = DavStore::account(id);
+        const DavAccount account = DavStore::accountWithSecret(key);
         providerId = account.oauthProvider;
         hint = account.username;
-    } else {
-        const Account account = m_accountManager->account(id);
-        providerId = account.oauthProvider;
-        hint = account.email;
     }
     const OAuthProvider provider = OAuthProvider::forId(providerId);
     if (!provider.isConfigured()) {

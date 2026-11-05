@@ -84,7 +84,7 @@ private:
     void handleArrived(qint64 accountId, const QList<qint64> &messageIds, bool notify);
     void wakeSnoozed();
     void markWoken(const QList<qint64> &messageIds);
-    void removeAccount(qint64 accountId);
+    void removeAccount(qint64 accountId, const QString &secretKey);
     void updateAccount(const Account &account);
     void processOutbox();
     void afterSent(qint64 outboxId, qint64 accountId, const QByteArray &raw, qint64 referenceMessage, const QString &referenceKind);

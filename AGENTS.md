@@ -104,7 +104,8 @@ Grundprinzipien:
   Erweiterung `addressbook-color`, lehnt der Server sie ab, gilt die Farbe lokal. Google läuft in M4 über einen eigenen Weg.
 - **Daten von außen in QML** (Termintitel, Kontaktnamen, Einladungen) nur mit `textFormat: Text.PlainText`:
   `Label` rendert sonst HTML, ein Titel könnte externe Bilder nachladen.
-- **Passwörter/Tokens** nur über `SecretStore`, nie in DB oder Konfiguration.
+- **Passwörter/Tokens** nur über `SecretStore`, nie in DB oder Konfiguration. Der Name des Eintrags steht in der DB
+  (`secret_key`). Kommt später das Ändern von Adresse oder Kontoname dazu, den Eintrag dabei umbenennen.
 - **OAuth2 (Google, Microsoft):** eigener Ablauf statt Qt NetworkAuth (API ändert sich zwischen 6.8 und 6.9).
   Client-ID/-Secret stehen in `fjordpost.conf`, Gruppe `[OAuth]` (Vorlage mit Anleitung: `dev/fjordpost.conf.example`),
   nie im Repo. Im SecretStore liegt nur das Refresh-Token; `accounts.oauth_provider` bzw. `dav_accounts.oauth_provider`
@@ -168,9 +169,10 @@ Grundprinzipien:
 - mbox-Import: ohne Statuskopfzeile gilt eine Nachricht als gelesen; `Mbox::entry` schreibt deshalb immer `Status`.
 - `KStatusNotifierItem` hält die Event-Schleife am Leben: Die App endet nicht mit dem letzten Fenster, Beenden geht nur
   ausdrücklich (`Qt.quit()`, `Prefs.general.closeToTray`). `grabWindow()` auf ein verborgenes Fenster stürzt ab.
-- **SecretStore-Schlüssel** (`account-N`, `dav-N`) hängen nicht am Datenverzeichnis: Ein Konto in einem frischen
-  `--data-dir` bekommt wieder `account-1` und überschreibt in KWallet das Passwort des ersten echten Kontos.
-  Mit `--data-dir` nur offline oder mit `FakeSecretStore` testen.
+- **SecretStore-Namen** waren bis v8 `account-N`/`dav-N` und kollidierten zwischen Datenverzeichnissen. Seit v9 vergibt
+  `AccountManager::save` bzw. `DavStore::saveAccount` beim Anlegen einen lesbaren Namen mit Profilkennung
+  (`Mail: max@example.de [3f9a·1]`, Spalte `secret_key`), immer über `secretKey()` lesen. Alte Einträge zieht
+  `migrateSecretNames` beim Start um, aber nur im Standardprofil.
 - Die Rückkehr der Browser-Anmeldung geht an `http://localhost:<port>`; der Browser löst `localhost` mal nach IPv4,
   mal nach IPv6 auf, `OAuthClient` lauscht deshalb auf beiden.
 - Google teilt eine Serie bei „dieser und alle folgenden“ in neue Serien mit eigener UID auf; über CalDAV sind die Teile

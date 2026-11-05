@@ -37,10 +37,10 @@ struct Account {
     QString signature;     // Klartext ohne Trenner "-- "
     bool leaveOnServer = true; // POP3: abgerufene Nachrichten nicht vom Server löschen
     QString oauthProvider; // bei AuthMethod::OAuth2: "google" oder "microsoft"
+    QString secretName;    // Eintrag im SecretStore, vergibt AccountManager::save beim Anlegen
 
     bool isValid() const { return id > 0; }
-    QString secretKey() const { return secretKeyFor(id); }
-    static QString secretKeyFor(qint64 accountId) { return QStringLiteral("account-%1").arg(accountId); }
+    QString secretKey() const { return secretName; }
 };
 
 // Holt vor einer Anmeldung ein frisches OAuth-Zugriffstoken (siehe OAuthTokens).

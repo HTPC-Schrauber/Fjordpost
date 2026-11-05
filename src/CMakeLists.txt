@@ -5,6 +5,7 @@ add_library(fjordpostcore STATIC
     auth/oauthtokens.cpp
     core/account.cpp
     core/accountmanager.cpp
+    core/secretmigration.cpp
     core/secretstore.cpp
     storage/blobstore.cpp
     storage/database.cpp

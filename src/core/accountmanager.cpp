@@ -34,6 +34,7 @@ Account accountFromQuery(const QSqlQuery &q)
     a.signature = q.value(QStringLiteral("signature")).toString();
     a.leaveOnServer = q.value(QStringLiteral("leave_on_server")).toBool();
     a.oauthProvider = q.value(QStringLiteral("oauth_provider")).toString();
+    a.secretName = q.value(QStringLiteral("secret_key")).toString();
     return a;
 }
 
@@ -121,6 +122,10 @@ Account AccountManager::save(Account account)
 
     if (isNew) {
         account.id = q.lastInsertId().toLongLong();
+        // Der Name braucht die id, deshalb erst nach dem Einfügen.
+        account.secretName = Database::secretEntryName(QStringLiteral("Mail"), account.email, account.id);
+        if (!setSecretName(account.id, account.secretName))
+            return {};
         m_accounts << account;
         Q_EMIT accountAdded(account);
     } else {
@@ -148,8 +153,24 @@ bool AccountManager::setSignature(qint64 id, const QString &signature)
     return true;
 }
 
+bool AccountManager::setSecretName(qint64 id, const QString &name)
+{
+    QSqlQuery q(Database::connection());
+    q.prepare(QStringLiteral("UPDATE accounts SET secret_key = :name WHERE id = :id"));
+    q.bindValue(QStringLiteral(":name"), nonNull(name));
+    q.bindValue(QStringLiteral(":id"), id);
+    if (!q.exec())
+        return false;
+    for (Account &a : m_accounts) {
+        if (a.id == id)
+            a.secretName = name;
+    }
+    return true;
+}
+
 bool AccountManager::remove(qint64 id)
 {
+    const QString secretKey = account(id).secretKey();
     QSqlQuery q(Database::connection());
     q.prepare(QStringLiteral("DELETE FROM accounts WHERE id = :id"));
     q.bindValue(QStringLiteral(":id"), id);
@@ -158,7 +179,7 @@ bool AccountManager::remove(qint64 id)
     m_accounts.removeIf([id](const Account &a) {
         return a.id == id;
     });
-    Q_EMIT accountRemoved(id);
+    Q_EMIT accountRemoved(id, secretKey);
     return true;
 }
 

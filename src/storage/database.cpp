@@ -261,6 +261,17 @@ const char *const migrations[] = {
     ALTER TABLE accounts ADD COLUMN oauth_provider TEXT NOT NULL DEFAULT '';
     ALTER TABLE dav_accounts ADD COLUMN oauth_provider TEXT NOT NULL DEFAULT '';
     )SQL",
+    // v9: Name des Eintrags im SecretStore, beim Anlegen vergeben (leer = alter Name "account-N"
+    // bzw. "dav-N", wird beim Start umgezogen). Die Profilkennung unterscheidet Datenverzeichnisse.
+    R"SQL(
+    CREATE TABLE meta (
+        key    TEXT PRIMARY KEY,
+        value  TEXT NOT NULL
+    );
+    INSERT INTO meta (key, value) VALUES ('profile_id', lower(hex(randomblob(2))));
+    ALTER TABLE accounts ADD COLUMN secret_key TEXT NOT NULL DEFAULT '';
+    ALTER TABLE dav_accounts ADD COLUMN secret_key TEXT NOT NULL DEFAULT '';
+    )SQL",
 };
 
 constexpr int migrationCount = int(sizeof(migrations) / sizeof(migrations[0]));
@@ -367,6 +378,18 @@ int Database::schemaVersion()
 int Database::latestSchemaVersion()
 {
     return migrationCount;
+}
+
+QString Database::profileId()
+{
+    QSqlQuery q(connection());
+    q.exec(QStringLiteral("SELECT value FROM meta WHERE key = 'profile_id'"));
+    return q.next() ? q.value(0).toString() : QString();
+}
+
+QString Database::secretEntryName(const QString &kind, const QString &label, qint64 id)
+{
+    return QStringLiteral("%1: %2 [%3\u00b7%4]").arg(kind, label, profileId()).arg(id);
 }
 
 bool Database::migrate(QSqlDatabase &db)

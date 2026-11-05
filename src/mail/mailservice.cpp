@@ -179,14 +179,14 @@ void MailService::dropAccount(qint64 accountId)
     m_secretCache.remove(accountId);
 }
 
-void MailService::removeAccount(qint64 accountId)
+void MailService::removeAccount(qint64 accountId, const QString &secretKey)
 {
     dropAccount(accountId);
     FilterStore::removeForAccount(accountId);
     m_syncing.remove(accountId);
-    m_secrets->remove(Account::secretKeyFor(accountId));
+    m_secrets->remove(secretKey);
     if (m_tokens)
-        m_tokens->forget(Account::secretKeyFor(accountId));
+        m_tokens->forget(secretKey);
     Q_EMIT syncingChanged();
 }
 
